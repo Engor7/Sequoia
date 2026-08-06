@@ -37,6 +37,11 @@ import {
   WigglePropertyIcon,
 } from '../../shared/ui/icon'
 import { evalHostScript } from '../../shared/cep/cs-interface'
+import {
+  refreshSelectedMotionEffects,
+  useSelectedMotionEffects,
+  type MotionEffectId,
+} from '../../shared/cep/motion-effects'
 import { addErrorLog } from '../../shared/logging/error-log'
 import { PageLayout } from '../../shared/ui/page/PageLayout'
 import {
@@ -80,7 +85,6 @@ const thumbnailSampleCount = 36
 const motionEffectTooltipOpenDelay = 700
 /** Clear of the trigger. HeroUI's own no-arrow default of 3px sits too close. */
 const tooltipOffset = 10
-const motionEffectSelectionPollInterval = 400
 const anchorPointPositions: AnchorPointPosition[] = [
   { horizontal: 0, id: 'top-left', label: 'Top left', vertical: 0 },
   { horizontal: 0.5, id: 'top-center', label: 'Top center', vertical: 0 },
@@ -925,11 +929,10 @@ type MotionEffectControlDescription = {
 type EasingMotionEffectActionProps = {
   applyScript: string
   ariaLabel: string
-  buttonModifier: string
   controls: MotionEffectControlDescription[]
   description: string
+  effectId: MotionEffectId
   effectName: string
-  hasSelectedScript: string
   icon: ReactNode
   removeScript: string
   tooltipTitle?: string
@@ -1005,11 +1008,10 @@ function EasingHostToolAction({
 function EasingMotionEffectAction({
   applyScript,
   ariaLabel,
-  buttonModifier,
   controls,
   description,
+  effectId,
   effectName,
-  hasSelectedScript,
   icon,
   removeScript,
   tooltipTitle,
@@ -1017,7 +1019,7 @@ function EasingMotionEffectAction({
   const lastApplyActionRef = useRef(0)
   const lastRemoveActionRef = useRef(0)
   const tooltipTimerRef = useRef<number | null>(null)
-  const [hasSelectedProperties, setHasSelectedProperties] = useState(false)
+  const hasSelectedProperties = useSelectedMotionEffects().has(effectId)
   const [isTooltipOpen, setIsTooltipOpen] = useState(false)
 
   const clearTooltipTimer = useCallback(() => {
@@ -1069,41 +1071,6 @@ function EasingMotionEffectAction({
     [clearTooltipTimer],
   )
 
-  useEffect(() => {
-    let isDisposed = false
-    let isRequestPending = false
-
-    const refreshSelection = (reloadHostInDevelopment: boolean) => {
-      if (isRequestPending) {
-        return
-      }
-
-      isRequestPending = true
-      evalHostScript(
-        hasSelectedScript,
-        (result) => {
-          isRequestPending = false
-
-          if (!isDisposed) {
-            setHasSelectedProperties(result.trim() === '1')
-          }
-        },
-        { reloadHostInDevelopment },
-      )
-    }
-
-    refreshSelection(true)
-    const interval = window.setInterval(
-      () => refreshSelection(false),
-      motionEffectSelectionPollInterval,
-    )
-
-    return () => {
-      isDisposed = true
-      window.clearInterval(interval)
-    }
-  }, [hasSelectedScript])
-
   const applyEffect = useCallback(() => {
     const now = Date.now()
 
@@ -1114,6 +1081,8 @@ function EasingMotionEffectAction({
     lastApplyActionRef.current = now
     evalHostScript(applyScript, (result) => {
       const normalizedResult = result.trim()
+
+      refreshSelectedMotionEffects()
 
       if (
         normalizedResult === 'EvalScript_ErrMessage' ||
@@ -1163,12 +1132,13 @@ function EasingMotionEffectAction({
     evalHostScript(removeScript, (result) => {
       const normalizedResult = result.trim()
 
+      refreshSelectedMotionEffects()
+
       if (normalizedResult === 'EvalScript_ErrMessage') {
         return
       }
 
       if (/^ok\|[1-9]\d*$/.test(normalizedResult)) {
-        setHasSelectedProperties(false)
         setIsTooltipOpen(false)
         return
       }
@@ -1184,7 +1154,6 @@ function EasingMotionEffectAction({
             ? undefined
             : normalizedResult.slice(countSeparator + 1)
 
-        setHasSelectedProperties(false)
         addErrorLog({
           details,
           message: `${effectName} was removed from ${removedCount || 'some'} properties, but other selected properties were skipped.`,
@@ -1231,7 +1200,7 @@ function EasingMotionEffectAction({
       >
         <Button
           aria-label={ariaLabel}
-          className={`easing-tool-action ${buttonModifier}`}
+          className="easing-tool-action"
           isIconOnly
           onBlur={scheduleTooltipClose}
           onFocus={openTooltipForFocus}
@@ -1459,7 +1428,6 @@ function EasingTools() {
             <EasingMotionEffectAction
               applyScript="Sequoia.applyWiggle()"
               ariaLabel="Применить Wiggle Property"
-              buttonModifier=""
               controls={[
                 {
                   description: 'Скорость случайного движения.',
@@ -1487,8 +1455,8 @@ function EasingTools() {
                 },
               ]}
               description="Добавляет случайное движение выбранным свойствам."
+              effectId="wiggle"
               effectName="Wiggle"
-              hasSelectedScript="Sequoia.hasSelectedWiggleProperties()"
               icon={<WigglePropertyIcon size={16} />}
               removeScript="Sequoia.removeSelectedWiggle()"
               tooltipTitle="Wiggle Property"
@@ -1496,7 +1464,6 @@ function EasingTools() {
             <EasingMotionEffectAction
               applyScript="Sequoia.applyBounce()"
               ariaLabel="Применить Bounce-анимацию"
-              buttonModifier=""
               controls={[
                 {
                   description:
@@ -1513,15 +1480,14 @@ function EasingTools() {
                 },
               ]}
               description="Затухающий отскок после последнего ключа без пересечения конечной точки."
+              effectId="bounce"
               effectName="Bounce"
-              hasSelectedScript="Sequoia.hasSelectedBounceProperties()"
               icon={<BounceIcon size={15} />}
               removeScript="Sequoia.removeSelectedBounce()"
             />
             <EasingMotionEffectAction
               applyScript="Sequoia.applyOvershoot()"
               ariaLabel="Применить Overshoot-анимацию"
-              buttonModifier=""
               controls={[
                 {
                   description:
@@ -1538,15 +1504,14 @@ function EasingTools() {
                 },
               ]}
               description="Затухающая инерция после последнего ключа с пересечением конечной точки."
+              effectId="overshoot"
               effectName="Overshoot"
-              hasSelectedScript="Sequoia.hasSelectedOvershootProperties()"
               icon={<OvershootIcon size={15} />}
               removeScript="Sequoia.removeSelectedOvershoot()"
             />
             <EasingMotionEffectAction
               applyScript="Sequoia.applySpin()"
               ariaLabel="Применить Spin Animation"
-              buttonModifier=""
               controls={[
                 {
                   description: 'Меняет направление вращения.',
@@ -1566,8 +1531,8 @@ function EasingTools() {
                 },
               ]}
               description="Добавляет постоянное вращение выбранным rotation-свойствам."
+              effectId="spin"
               effectName="Spin"
-              hasSelectedScript="Sequoia.hasSelectedSpinProperties()"
               icon={<SpinIcon size={14} />}
               removeScript="Sequoia.removeSelectedSpin()"
               tooltipTitle="Spin Animation"
@@ -1575,7 +1540,6 @@ function EasingTools() {
             <EasingMotionEffectAction
               applyScript="Sequoia.applyBlinker()"
               ariaLabel="Применить Blinker / Flicker"
-              buttonModifier=""
               controls={[
                 {
                   description: 'Скорость мерцания.',
@@ -1595,8 +1559,8 @@ function EasingTools() {
                 },
               ]}
               description="Добавляет мерцание прозрачности."
+              effectId="blinker"
               effectName="Blinker / Flicker"
-              hasSelectedScript="Sequoia.hasSelectedBlinkerProperties()"
               icon={<BlinkerIcon size={16} />}
               removeScript="Sequoia.removeSelectedBlinker()"
               tooltipTitle="Blinker / Flicker"
@@ -1604,7 +1568,6 @@ function EasingTools() {
             <EasingMotionEffectAction
               applyScript="Sequoia.applyFader()"
               ariaLabel="Применить Fader"
-              buttonModifier=""
               controls={[
                 {
                   description: 'Длительность fade в кадрах.',
@@ -1616,8 +1579,8 @@ function EasingTools() {
                 },
               ]}
               description="Добавляет автоматический fade прозрачности."
+              effectId="fader"
               effectName="Fader"
-              hasSelectedScript="Sequoia.hasSelectedFaderProperties()"
               icon={<FaderIcon size={14} />}
               removeScript="Sequoia.removeSelectedFader()"
               tooltipTitle="Fader"

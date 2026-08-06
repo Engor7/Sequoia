@@ -1520,6 +1520,7 @@
     ],
     effectName: "Wiggle",
     expressionMarker: "// SEQUOIA_WIGGLE_V1|",
+    id: "wiggle",
     legacyMatchNames: ["Pseudo/Sequoia Wiggle"],
     matchName: "Pseudo/Sequoia Wiggle v1",
     presetName: "SequoiaWiggle.ffx",
@@ -1530,6 +1531,7 @@
     controlNames: ["Enable", "Reverse", "Speed", "Frame Rate", "Offset"],
     effectName: "Spin",
     expressionMarker: "// SEQUOIA_SPIN_V1|",
+    id: "spin",
     legacyMatchNames: ["Pseudo/Sequoia Spin"],
     matchName: "Pseudo/Sequoia Spin v1",
     presetName: "SequoiaSpin.ffx",
@@ -1547,6 +1549,7 @@
     ],
     effectName: "Blinker / Flicker",
     expressionMarker: "// SEQUOIA_BLINKER_V1|",
+    id: "blinker",
     legacyMatchNames: ["Pseudo/Sequoia Blinker"],
     matchName: "Pseudo/Sequoia Blinker v1",
     presetName: "SequoiaBlinker.ffx",
@@ -1557,6 +1560,7 @@
     controlNames: ["Enable", "Animation", "Linear"],
     effectName: "Fader",
     expressionMarker: "// SEQUOIA_FADER_V1|",
+    id: "fader",
     legacyMatchNames: ["Pseudo/Sequoia Fader"],
     matchName: "Pseudo/Sequoia Fader v1",
     presetName: "SequoiaFader.ffx",
@@ -2302,36 +2306,33 @@
     return layers;
   }
 
-  function hasSelectedMotionProperties(config) {
-    var composition = app.project.activeItem;
-
-    if (!(composition instanceof CompItem)) {
-      return "0";
-    }
-
-    var selectedProperties = composition.selectedProperties;
-
+  /**
+   * Whether an already-read selection carries this motion effect.
+   *
+   * The selection is passed in rather than read here, because the panel asks
+   * about every motion effect at once and reading `selectedProperties` is the
+   * expensive part.
+   */
+  function selectionHasMotion(config, selectedProperties, layers) {
     for (var index = 0; index < selectedProperties.length; index += 1) {
       if (getMotionSetup(selectedProperties[index], config)) {
-        return "1";
+        return true;
       }
     }
-
-    var layers = getSelectedLayerList(composition);
 
     for (var layerIndex = 0; layerIndex < layers.length; layerIndex += 1) {
       try {
         var effects = layers[layerIndex].property("ADBE Effect Parade");
 
         if (effects && getMotionEffect(effects, config, null)) {
-          return "1";
+          return true;
         }
       } catch (error) {
         void error;
       }
     }
 
-    return "0";
+    return false;
   }
 
   function clearMotionExpressions(group, config) {
@@ -2600,18 +2601,6 @@
     return changedSegments.toString();
   };
 
-  Sequoia.hasSelectedBounceProperties = function () {
-    var composition = app.project.activeItem;
-
-    if (!(composition instanceof CompItem)) {
-      return "0";
-    }
-
-    return getSelectedBouncePropertyTargets(composition).length > 0
-      ? "1"
-      : "0";
-  };
-
   Sequoia.removeSelectedBounce = function () {
     var composition = app.project.activeItem;
 
@@ -2817,18 +2806,6 @@
         ? errors.join("\n")
         : "Bounce could not be applied."
     );
-  };
-
-  Sequoia.hasSelectedOvershootProperties = function () {
-    var composition = app.project.activeItem;
-
-    if (!(composition instanceof CompItem)) {
-      return "0";
-    }
-
-    return getSelectedOvershootPropertyTargets(composition).length > 0
-      ? "1"
-      : "0";
   };
 
   Sequoia.removeSelectedOvershoot = function () {
@@ -3038,8 +3015,42 @@
     );
   };
 
-  Sequoia.hasSelectedWiggleProperties = function () {
-    return hasSelectedMotionProperties(wiggleMotionConfig);
+  /**
+   * Ids of every motion effect present in the current selection, comma
+   * separated, for example "wiggle,bounce".
+   *
+   * The panel polls this while the Main page is open. One call covers all of
+   * the effects so the selection is read once per poll instead of once per
+   * effect button.
+   */
+  Sequoia.getSelectedMotionEffects = function () {
+    var composition = app.project.activeItem;
+
+    if (!(composition instanceof CompItem)) {
+      return "";
+    }
+
+    var selectedProperties = composition.selectedProperties;
+    var layers = getSelectedLayerList(composition);
+    var found = [];
+
+    for (var index = 0; index < additionalMotionConfigs.length; index += 1) {
+      var config = additionalMotionConfigs[index];
+
+      if (selectionHasMotion(config, selectedProperties, layers)) {
+        found.push(config.id);
+      }
+    }
+
+    if (getSelectedBouncePropertyTargets(composition).length > 0) {
+      found.push("bounce");
+    }
+
+    if (getSelectedOvershootPropertyTargets(composition).length > 0) {
+      found.push("overshoot");
+    }
+
+    return found.join(",");
   };
 
   Sequoia.removeSelectedWiggle = function () {
@@ -3058,10 +3069,6 @@
       getSelectedNumericMotionTargets(composition, null),
       buildWiggleExpression
     );
-  };
-
-  Sequoia.hasSelectedSpinProperties = function () {
-    return hasSelectedMotionProperties(spinMotionConfig);
   };
 
   Sequoia.removeSelectedSpin = function () {
@@ -3094,10 +3101,6 @@
     );
   };
 
-  Sequoia.hasSelectedBlinkerProperties = function () {
-    return hasSelectedMotionProperties(blinkerMotionConfig);
-  };
-
   Sequoia.removeSelectedBlinker = function () {
     return removeSelectedMotion(blinkerMotionConfig);
   };
@@ -3114,10 +3117,6 @@
       getSelectedLayersWithPropertyTargets(composition, "ADBE Opacity"),
       buildBlinkerExpression
     );
-  };
-
-  Sequoia.hasSelectedFaderProperties = function () {
-    return hasSelectedMotionProperties(faderMotionConfig);
   };
 
   Sequoia.removeSelectedFader = function () {
