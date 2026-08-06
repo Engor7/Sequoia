@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExtensionManifest
+  Version="12.0"
+  ExtensionBundleId="com.sequoia.panel"
+  ExtensionBundleVersion="0.0.0"
+  ExtensionBundleName="Sequoia"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ExtensionList>
+    <Extension Id="com.sequoia.panel" Version="0.0.0" />
+  </ExtensionList>
+  <ExecutionEnvironment>
+    <HostList>
+      <Host Name="AEFT" Version="[26.0,26.99]" />
+    </HostList>
+    <LocaleList>
+      <Locale Code="All" />
+    </LocaleList>
+    <RequiredRuntimeList>
+      <RequiredRuntime Name="CSXS" Version="12.0" />
+    </RequiredRuntimeList>
+  </ExecutionEnvironment>
+  <DispatchInfoList>
+    <Extension Id="com.sequoia.panel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./cep/dev.html</MainPath>
+          <ScriptPath>./jsx/host.jsx</ScriptPath>
+          <CEFCommandLine>
+            <Parameter>--allow-file-access</Parameter>
+            <Parameter>--allow-file-access-from-files</Parameter>
+            <Parameter>--enable-nodejs</Parameter>
+            <Parameter>--mixed-context</Parameter>
+          </CEFCommandLine>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>Sequoia</Menu>
+          <Geometry>
+            <Size>
+              <Width>360</Width>
+              <Height>520</Height>
+            </Size>
+            <MinSize>
+              <Width>320</Width>
+              <Height>360</Height>
+            </MinSize>
+          </Geometry>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>

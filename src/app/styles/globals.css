@@ -1,0 +1,104 @@
+@import 'tailwindcss';
+@import '@heroui/styles';
+
+@layer base {
+  :root,
+  .dark,
+  [data-theme='dark'] {
+    color-scheme: dark;
+
+    --white: #fff;
+    --black: #000;
+    --snow: #ebebeb;
+    --eclipse: #1d1d1d;
+
+    --background: #1d1d1d;
+    --foreground: #d0d0d0;
+
+    --surface: #242424;
+    --surface-foreground: #d0d0d0;
+    --surface-secondary: #303030;
+    --surface-secondary-foreground: #d0d0d0;
+    --surface-tertiary: #3a3a3a;
+    --surface-tertiary-foreground: #ebebeb;
+    --surface-hover: #303030;
+
+    --overlay: #303030;
+    --overlay-foreground: #ebebeb;
+
+    --muted: #8d8d8d;
+
+    --default: #3a3a3a;
+    --default-foreground: #ebebeb;
+    --default-hover: #4b4b4b;
+    --default-soft: rgba(235, 235, 235, 0.08);
+    --default-soft-foreground: #d0d0d0;
+    --default-soft-hover: rgba(235, 235, 235, 0.12);
+
+    --accent: #4096f3;
+    --accent-foreground: var(--snow);
+    --accent-hover: #5eaaf7;
+    --accent-soft: rgba(64, 150, 243, 0.2);
+    --accent-soft-foreground: #98cefd;
+    --accent-soft-hover: rgba(64, 150, 243, 0.3);
+
+    --success: #34bb84;
+    --success-foreground: #000;
+    --success-hover: #4bcd95;
+    --success-soft: rgba(52, 187, 132, 0.16);
+    --success-soft-foreground: #89ecbc;
+    --success-soft-hover: rgba(52, 187, 132, 0.24);
+
+    --warning: #d8b500;
+    --warning-foreground: #000;
+    --warning-hover: #e9c700;
+    --warning-soft: rgba(216, 181, 0, 0.16);
+    --warning-soft-foreground: #f7d804;
+    --warning-soft-hover: rgba(216, 181, 0, 0.24);
+
+    --danger: #ee4331;
+    --danger-foreground: #000;
+    --danger-hover: #f9634c;
+    --danger-soft: rgba(238, 67, 49, 0.16);
+    --danger-soft-foreground: #ff9e8c;
+    --danger-soft-hover: rgba(238, 67, 49, 0.24);
+
+    --segment: #303030;
+    --segment-foreground: #ebebeb;
+
+    --border: #4b4b4b;
+    --border-secondary: #3a3a3a;
+    --border-tertiary: #6a6a6a;
+    --separator: #303030;
+    --separator-secondary: #3a3a3a;
+    --separator-tertiary: #4b4b4b;
+    --focus: #4096f3;
+    --link: #98cefd;
+    --backdrop: rgba(0, 0, 0, 0.6);
+
+    --field-background: #242424;
+    --field-foreground: #ebebeb;
+    --field-placeholder: #8d8d8d;
+    --field-border: #4b4b4b;
+    --field-border-width: 1px;
+    --field-hover: #303030;
+    --field-focus: #303030;
+    --field-border-hover: #6a6a6a;
+    --field-border-focus: #4096f3;
+
+    --background-secondary: #242424;
+    --background-tertiary: #303030;
+    --background-inverse: #ebebeb;
+
+    --scrollbar-thumb: rgba(235, 235, 235, 0.22);
+    --scrollbar-thumb-hover: rgba(235, 235, 235, 0.36);
+    --scrollbar-track: transparent;
+    --scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+
+    --surface-shadow: 0 0 0 1px rgba(235, 235, 235, 0.05) inset;
+    --overlay-shadow:
+      0 0 0 1px rgba(235, 235, 235, 0.08) inset,
+      0 8px 18px rgba(0, 0, 0, 0.38);
+    --field-shadow: 0 0 0 0 transparent inset;
+  }
+}

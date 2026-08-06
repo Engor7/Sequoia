@@ -1,0 +1,1312 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  background: var(--background);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/**
+ * A definite height, not `min-height`. The panel is the scroll viewport: the
+ * shell below sizes its content row against this chain, and only a definite
+ * height makes that row stop at the panel edge instead of growing to fit.
+ */
+html,
+body,
+#root {
+  min-width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/**
+ * `height`, not `min-height: 100vh`. Under `min-height` the shell's own height
+ * stays indefinite, so the `1fr` content row resolves against its content and
+ * grows past the panel — `.page-content` then never overflows, its `overflow`
+ * never engages, and `body { overflow: hidden }` silently clips everything
+ * below the fold. Measured in Chromium: a 1838px page left the row 1838px tall
+ * inside a 533px viewport with nothing scrollable. A definite height pins the
+ * row to the leftover space and hands the overflow to `.page-content`.
+ */
+.app-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  background: var(--background);
+}
+
+.app-header {
+  min-width: 0;
+  padding: 4px;
+  border-top: 1px solid var(--border-secondary);
+  border-bottom: 1px solid var(--border-secondary);
+  background: var(--surface);
+}
+
+.page-navigation {
+  display: flex;
+  min-width: 0;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.page-navigation__item {
+  display: flex;
+  flex: 1 1 30px;
+  min-width: 24px;
+  max-width: 32px;
+}
+
+.page-navigation__button {
+  width: 100%;
+  min-width: 24px;
+  height: 30px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease-out,
+    color 160ms ease-out,
+    outline-color 160ms ease-out,
+    transform 120ms ease-out;
+
+  svg,
+  svg * {
+    pointer-events: none;
+  }
+
+  &:hover,
+  &[data-hovered='true'] {
+    color: var(--foreground);
+    background-color: var(--default);
+  }
+
+  &[aria-current='page'] {
+    color: var(--accent-soft-foreground);
+    background: var(--accent-soft);
+    outline: 1px solid rgba(64, 150, 243, 0.28);
+    outline-offset: -1px;
+  }
+
+  &[aria-current='page']:hover,
+  &[aria-current='page'][data-hovered='true'] {
+    color: var(--accent-soft-foreground);
+    background: var(--accent-soft-hover);
+  }
+}
+
+.page-navigation__button svg.page-navigation__icon[data-slot='icon'] {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  transform-origin: center;
+}
+
+.page-navigation__tooltip {
+  padding: 5px 8px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  color: var(--overlay-foreground);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/**
+ * The scroll viewport spans the whole panel so its scrollbar sits on the panel
+ * edge. The reading width is capped on `.tool-page` inside it instead, which
+ * leaves narrow panels — the common case — laid out exactly as before.
+ *
+ * The scrollbar is drawn rather than left native: macOS hands CEP an overlay
+ * scrollbar that measures 0px and stays invisible until the wheel moves, so a
+ * page with more below it looks identical to one that fits — measured in the
+ * live panel, `offsetWidth - clientWidth` was 0 on every page. Styling
+ * `::-webkit-scrollbar` turns it into a classic scrollbar that is always
+ * visible; `scrollbar-gutter` then reserves its track on every page, so
+ * switching between a page that overflows and one that does not never shifts
+ * the content sideways. Both are supported by CEP's Chromium 99 — verified in
+ * the panel; the standard `scrollbar-width`/`scrollbar-color` pair is not.
+ */
+.page-content {
+  --scrollbar-size: 10px;
+
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+
+  &::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+  }
+
+  &::-webkit-scrollbar-track,
+  &::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track);
+  }
+
+  /**
+   * The transparent border plus `padding-box` clipping is what keeps the thumb
+   * a 6px pill inside a 10px track, instead of a bar filling the full gutter.
+   * `:hover` is restated outside any hover-capability query because CEP
+   * reports `hover: hover` as false while still firing CSS `:hover`.
+   */
+  &::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--scrollbar-thumb);
+    background-clip: padding-box;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: padding-box;
+  }
+}
+
+/**
+ * The right padding pays for the reserved gutter, so the text edge sits the
+ * same 12px from both panel edges whether or not the page scrolls.
+ */
+.tool-page {
+  max-width: 550px;
+  min-width: 0;
+  padding: 14px calc(12px - var(--scrollbar-size, 0px)) 24px 12px;
+}
+
+.tool-page__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0;
+}
+
+.tool-page__content {
+  margin-top: 14px;
+}
+
+.tool-page__content--flush {
+  margin-top: 0;
+}
+
+.logs-page {
+  min-width: 0;
+}
+
+.logs-page__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.logs-page__count {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.logs-page__clear {
+  min-width: 58px;
+  height: 28px;
+  cursor: pointer;
+
+  &:hover,
+  &[data-hovered='true'] {
+    border-color: var(--border-tertiary);
+    background: var(--default-soft-hover);
+  }
+}
+
+.logs-page__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.logs-page__entry {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border-secondary);
+  border-left: 2px solid var(--danger);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.logs-page__entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.logs-page__source {
+  color: var(--danger-soft-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  text-transform: uppercase;
+}
+
+.logs-page__time {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.logs-page__message {
+  margin: 5px 0 0;
+  color: var(--foreground);
+  font-size: 12px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.logs-page__details {
+  max-height: 180px;
+  margin: 7px 0 0;
+  padding: 7px 8px;
+  overflow: auto;
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  line-height: 15px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.logs-page__empty {
+  margin: 20px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+  text-align: center;
+}
+
+.easing-workspace {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.easing-editor {
+  --easing-start: #e66738;
+  --easing-curve: #ffb400;
+  --easing-end: #4271f5;
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.easing-preview {
+  min-width: 0;
+}
+
+.easing-preview__viewport {
+  min-width: 0;
+  height: 24px;
+  overflow: hidden;
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  background: var(--background);
+  padding: 0 11px;
+}
+
+.easing-preview__track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.easing-preview__frame {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.18;
+  transform: translate(-50%, -50%);
+}
+
+.easing-preview__active-frame {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--easing-curve);
+  transform: translate(-50%, -50%);
+}
+
+.easing-preview__active-frame--playing {
+  animation-duration: 2100ms;
+  animation-iteration-count: infinite;
+  animation-name: easing-preview-motion;
+}
+
+@keyframes easing-preview-motion {
+  0% {
+    left: 0;
+  }
+
+  67% {
+    left: 100%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
+.easing-curve__canvas {
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  background: var(--background);
+  cursor: crosshair;
+}
+
+.easing-curve__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.easing-curve__grid-line {
+  stroke: var(--separator);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.easing-curve__handle-line {
+  stroke: var(--muted);
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.easing-curve__handle-line--start {
+  stroke: var(--easing-start);
+  opacity: 0.48;
+}
+
+.easing-curve__handle-line--end {
+  stroke: var(--easing-end);
+  opacity: 0.48;
+}
+
+.easing-curve__handle-hit-area {
+  fill: transparent;
+  cursor: grab;
+  outline: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.easing-curve__handle {
+  fill: var(--background);
+  stroke-width: 2.5;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.easing-curve__handle-hit-area:hover + .easing-curve__handle,
+.easing-curve__handle-hit-area:focus-visible + .easing-curve__handle {
+  opacity: 0.72;
+}
+
+.easing-curve__handle--start {
+  stroke: var(--easing-start);
+}
+
+.easing-curve__handle--end {
+  stroke: var(--easing-end);
+}
+
+.easing-curve__anchor--start {
+  fill: var(--easing-start);
+}
+
+.easing-curve__anchor--end {
+  fill: var(--easing-end);
+}
+
+.easing-curve__path {
+  fill: none;
+  stroke: var(--easing-curve);
+  stroke-linecap: round;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.easing-curve__anchor {
+  stroke: var(--background);
+  stroke-width: 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.easing-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  .button {
+    cursor: pointer;
+    transition:
+      background-color 160ms ease-out,
+      border-color 160ms ease-out,
+      color 160ms ease-out,
+      transform 120ms ease-out;
+
+    svg,
+    svg * {
+      pointer-events: none;
+    }
+
+    &:disabled,
+    &[aria-disabled='true'] {
+      cursor: default;
+    }
+  }
+
+  .button--sm {
+    height: 28px;
+    padding-right: 10px;
+    padding-left: 10px;
+    font-size: 12px;
+  }
+
+  .button--icon-only.button--sm {
+    width: 28px;
+    padding: 0;
+  }
+}
+
+.easing-tools {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+  margin-top: 20px;
+}
+
+.easing-tools__section {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.easing-anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 32px);
+  grid-template-rows: repeat(3, 32px);
+  gap: 7px;
+}
+
+.easing-anchor-action,
+.easing-tool-action {
+  --button-bg: rgba(255, 255, 255, 0.015);
+  --button-bg-hover: rgba(255, 255, 255, 0.055);
+  --button-bg-pressed: rgba(255, 255, 255, 0.085);
+
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-color: rgba(255, 255, 255, 0.055);
+  border-radius: 5px;
+  color: rgba(208, 208, 208, 0.65);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out,
+    color 140ms ease-out;
+
+  &:hover,
+  &[data-hovered='true'] {
+    border-color: rgba(255, 255, 255, 0.11);
+    background-color: var(--button-bg-hover);
+    color: var(--foreground);
+  }
+}
+
+.easing-anchor-action.button--icon-only.button--sm {
+  width: 32px;
+  height: 32px;
+}
+
+.easing-tool-action.button--icon-only.button--sm {
+  width: 32px;
+  height: 32px;
+}
+
+.easing-anchor-action__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  pointer-events: none;
+}
+
+.easing-tool-actions {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.easing-tool-actions__group {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.easing-tool-action {
+  font-size: 10px;
+  font-weight: 600;
+
+  span,
+  svg,
+  svg * {
+    pointer-events: none;
+  }
+}
+
+.easing-tool-action--letter {
+  font-size: 10px;
+  letter-spacing: 0.01em;
+}
+
+.easing-tool-action--temporary-label {
+  font-size: 8px;
+  letter-spacing: -0.015em;
+
+  span {
+    transform: translateY(0.25px);
+  }
+}
+
+.easing-motion-action {
+  position: relative;
+  display: inline-flex;
+}
+
+.easing-motion-remove.button--icon-only.button--sm {
+  --button-bg: #bd3d3d;
+  --button-bg-hover: #d64a4a;
+  --button-bg-pressed: #a83232;
+
+  position: absolute;
+  z-index: 3;
+  top: -6px;
+  right: -4px;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  background-color: var(--button-bg);
+  box-shadow: 0 0 0 2px var(--background);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+
+  &:hover,
+  &[data-hovered='true'] {
+    border-color: rgba(255, 255, 255, 0.34);
+    background-color: var(--button-bg-hover);
+  }
+
+  span {
+    display: block;
+    transform: translateY(-0.5px);
+    pointer-events: none;
+  }
+}
+
+/**
+ * CEP runs Chromium 99, which cannot parse native CSS nesting, so every nested
+ * block in HeroUI's stylesheet is dropped by the parser. That includes the
+ * whole `.tooltip { &[data-entering='true'] { … } }` group, which is why a
+ * tooltip snaps into place inside After Effects but animates in the browser —
+ * verified live: no rule matching `data-entering` exists in the panel's CSSOM.
+ *
+ * Restating it here fixes it because SCSS flattens the nesting before it ships.
+ * Keep this animation on `transform`/`opacity`: the individual `translate` and
+ * `scale` properties are Chromium 104+, so they are unavailable here too. The
+ * origin comes from HeroUI's `--trigger-anchor-point`, so the tooltip grows out
+ * of the control it belongs to.
+ */
+@keyframes sequoia-tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes sequoia-tooltip-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+.tooltip {
+  &[data-entering='true'] {
+    animation: sequoia-tooltip-in 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  &[data-exiting='true'] {
+    animation: sequoia-tooltip-out 110ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+}
+
+.easing-motion-tooltip,
+.keyframes-tooltip {
+  width: 260px;
+  max-width: calc(100vw - 20px);
+  padding: 10px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #303030;
+  color: rgba(235, 235, 235, 0.82);
+  font-size: 10px;
+  hyphens: none;
+  line-height: 1.45;
+  overflow-wrap: normal;
+  pointer-events: none;
+  word-break: normal;
+  word-wrap: normal;
+  -webkit-hyphens: none;
+}
+
+.keyframes-tooltip--compact {
+  width: auto;
+  max-width: 200px;
+}
+
+.easing-motion-tooltip__content,
+.keyframes-tooltip__content {
+  display: grid;
+  gap: 7px;
+
+  p,
+  dl,
+  dd {
+    margin: 0;
+  }
+}
+
+.easing-motion-tooltip__title,
+.keyframes-tooltip__title {
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.easing-motion-tooltip__controls,
+.keyframes-tooltip__hints {
+  display: grid;
+  gap: 4px;
+
+  dt,
+  dd {
+    display: inline;
+  }
+
+  dt {
+    color: var(--foreground);
+    font-weight: 600;
+
+    &::after {
+      content: ' — ';
+    }
+  }
+}
+
+.easing-keyframe-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.easing-keyframe-action {
+  --button-bg: rgba(255, 255, 255, 0.015);
+  --button-bg-hover: rgba(255, 255, 255, 0.04);
+  --button-bg-pressed: rgba(255, 255, 255, 0.065);
+
+  border-color: rgba(255, 255, 255, 0.045);
+  border-radius: 6px;
+  color: rgba(208, 208, 208, 0.6);
+
+  svg[data-slot='icon'] {
+    width: 12px;
+    height: 12px;
+    margin: 0;
+  }
+
+  &:hover,
+  &[data-hovered='true'] {
+    border-color: rgba(255, 255, 255, 0.08);
+    background-color: var(--button-bg-hover);
+    color: rgba(208, 208, 208, 0.8);
+  }
+}
+
+.easing-apply-action {
+  --button-bg: #1969ce;
+  --button-bg-hover: #2475dc;
+  --button-bg-pressed: #145ab3;
+
+  color: #fff;
+  font-weight: 600;
+
+  &:hover,
+  &[data-hovered='true'] {
+    background-color: var(--button-bg-hover);
+  }
+}
+
+.easing-presets-grid {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  column-gap: 6px;
+  row-gap: 6px;
+  overflow: hidden;
+}
+
+.easing-preset-card {
+  --button-bg: rgba(255, 255, 255, 0.018);
+  --button-bg-hover: rgba(255, 255, 255, 0.055);
+  --button-bg-pressed: rgba(255, 255, 255, 0.075);
+
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  flex-direction: column;
+  gap: 1px;
+  justify-content: center;
+  padding: 3px 5px 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  border-radius: 6px;
+  color: rgba(208, 208, 208, 0.68);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out,
+    color 140ms ease-out,
+    transform 120ms ease-out;
+
+  svg,
+  svg * {
+    pointer-events: none;
+  }
+
+  &:hover,
+  &[data-hovered='true'] {
+    border-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--button-bg-hover);
+    color: var(--foreground);
+  }
+
+}
+
+.easing-preset-card--catalog {
+  height: 52px;
+  padding: 2px 4px 3px;
+}
+
+.easing-preset-card--compact {
+  gap: 0;
+  padding: 3px;
+}
+
+.easing-preset-card__thumbnail {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.easing-preset-card__reference {
+  stroke: var(--separator-tertiary);
+  stroke-dasharray: 2 2;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.easing-preset-card__curve {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  vector-effect: non-scaling-stroke;
+}
+
+.easing-preset-card__label {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 12px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.easing-preset-card--more {
+  align-items: center;
+  justify-content: center;
+}
+
+.easing-preset-card__ellipsis {
+  display: block;
+  margin-top: -4px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  line-height: 1;
+  transform: translateX(1px);
+}
+
+.easing-presets-modal {
+  width: calc(100vw - 16px);
+  max-width: 512px;
+  padding: 14px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 8px;
+  background: var(--overlay);
+}
+
+.easing-presets-modal__header {
+  min-height: 26px;
+  justify-content: center;
+  padding-right: 30px;
+
+  .modal__heading {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 18px;
+  }
+}
+
+.easing-presets-modal__close {
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+
+  &:hover,
+  &[data-hovered='true'] {
+    background: var(--default-soft-hover);
+    color: var(--foreground);
+  }
+}
+
+.easing-presets-modal__body {
+  margin-top: 8px;
+  padding: 1px;
+}
+
+.easing-presets-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 5px;
+  min-width: 0;
+  padding: 1px;
+}
+
+.keyframes-page {
+  /**
+   * One easing for every hover on the page, so the tools, the segments and the
+   * number fields settle at the same rate instead of each running HeroUI's own
+   * timing. Slower than the 140ms this used to run at — at that length the
+   * change reads as a snap rather than a fade.
+   */
+  --keyframes-hover-duration: 200ms;
+  --keyframes-hover-ease: cubic-bezier(0.33, 1, 0.68, 1);
+
+  /**
+   * Outer height of a controls row. The header reserves it whether or not the
+   * section has controls, so every section's tools start on the same line and
+   * the two grid columns stay level.
+   */
+  --keyframes-control-height: 18px;
+
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 30px 18px;
+  min-width: 0;
+}
+
+/* A section left without a partner takes the whole row. */
+.keyframes-section:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* Two columns of tool buttons stop fitting in a narrow panel. */
+@media (max-width: 400px) {
+  .keyframes-page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.keyframes-section {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* Title on the left, its controls pushed to the right edge of the section. */
+.keyframes-section__header {
+  display: flex;
+  min-width: 0;
+  min-height: var(--keyframes-control-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.keyframes-section__title {
+  margin: 0;
+  color: #b2b2b2;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 13px;
+  text-transform: uppercase;
+}
+
+.keyframes-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.keyframes-control.tooltip__trigger {
+  display: flex;
+  flex: none;
+  outline: none;
+}
+
+.keyframes-field {
+  width: 30px;
+  min-width: 0;
+  gap: 0;
+}
+
+/**
+ * Same 18px shell as the segmented track next to it, so the pair reads as one
+ * control row. The border stays transparent until focus, which keeps the
+ * outer size stable and leaves the focus ring to HeroUI's field tokens. The
+ * `:hover` rule is restated outside `@media (hover: hover)` because CEP
+ * reports that query as false while still firing CSS `:hover`.
+ */
+.keyframes-field__group.number-field__group {
+  height: var(--keyframes-control-height);
+  min-height: var(--keyframes-control-height);
+  border-width: 1px;
+  border-color: transparent;
+  border-radius: calc(var(--radius) * 2.5);
+  background: var(--field-background);
+  box-shadow: none;
+  grid-template-columns: minmax(0, 1fr);
+  transition:
+    background-color var(--keyframes-hover-duration) var(--keyframes-hover-ease),
+    border-color var(--keyframes-hover-duration) var(--keyframes-hover-ease);
+
+  &:hover:not(:focus-within),
+  &[data-hovered='true']:not([data-focus-within='true']) {
+    border-color: transparent;
+    background: var(--field-hover);
+  }
+
+  &:focus-within,
+  &[data-focus-within='true'] {
+    border-color: var(--field-border-focus);
+    background: var(--field-focus);
+  }
+}
+
+.keyframes-field__input.number-field__input {
+  height: 16px;
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.keyframes-segmented.tabs {
+  gap: 0;
+}
+
+.keyframes-segmented__track.tabs__list-container {
+  width: fit-content;
+  background: var(--field-background);
+
+  /**
+   * A handful of two-letter segments never overflows, so the scroll chevrons
+   * and the fading edges only ever show up on a sub-pixel miscount.
+   */
+  > .tabs__list-container__scroll-prev,
+  > .tabs__list-container__scroll-next {
+    display: none;
+  }
+
+  /**
+   * The list is `inline-flex`, so as an inline-level box it sits on this
+   * element's baseline and the line-box strut adds its descender underneath —
+   * the track measured 24px around 20px of segments and pushed them off the
+   * vertical centre. Making the scroller a flex container blockifies the list,
+   * so the track is exactly as tall as the segments it holds.
+   */
+  .tabs__list-container__scroller {
+    display: flex;
+    overflow: visible;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+}
+
+.keyframes-segmented__list.tabs__list {
+  min-width: 0;
+  padding: 1px;
+}
+
+/**
+ * The selected segment is carried by its fill alone. HeroUI puts a
+ * `shadow-surface` hairline on the indicator, which at this size reads as an
+ * outline drawn around the active label rather than as a raised surface.
+ */
+.keyframes-segmented .tabs__indicator {
+  box-shadow: none;
+}
+
+/**
+ * Only the metrics are ours; the colours stay on HeroUI's tokens. Both the
+ * selected colour and the pointer are restated because CEP leaves `:hover`
+ * visuals behind `@media (hover: hover)` unapplied.
+ */
+/**
+ * `flex: none` with an auto width is what makes the padding real. HeroUI sizes
+ * a tab with `w-full`, so every segment in a row takes the same flex base,
+ * overflows, and shrinks back to an identical width — a long label like `Keys`
+ * was left with 4px of side padding while `In` got 12px. Sizing each segment
+ * to its own text keeps the 8px even across labels; the track is
+ * `width: fit-content`, so the row stays exactly as wide as it was.
+ */
+.keyframes-segmented__option.tabs__tab {
+  /* The 1px of track padding on each side brings the shell back up to size. */
+  height: calc(var(--keyframes-control-height) - 2px);
+  width: auto;
+  flex: none;
+  min-width: 22px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--keyframes-hover-duration) var(--keyframes-hover-ease),
+    background-color var(--keyframes-hover-duration) var(--keyframes-hover-ease);
+
+  &:not([data-selected='true']):hover,
+  &[data-hovered='true']:not([data-selected='true']) {
+    color: var(--foreground);
+  }
+
+  &[data-selected='true'] {
+    color: var(--segment-foreground);
+  }
+}
+
+/* One row of equal columns, so the tools always fill the section width. */
+.keyframes-tools {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: 4px;
+}
+
+.keyframes-tool {
+  --button-bg: rgba(255, 255, 255, 0.015);
+  --button-bg-hover: rgba(255, 255, 255, 0.055);
+  --button-bg-pressed: rgba(255, 255, 255, 0.085);
+
+  padding: 0;
+  border-color: rgba(255, 255, 255, 0.055);
+  border-radius: 5px;
+  color: rgba(208, 208, 208, 0.65);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color var(--keyframes-hover-duration) var(--keyframes-hover-ease),
+    border-color var(--keyframes-hover-duration) var(--keyframes-hover-ease),
+    color var(--keyframes-hover-duration) var(--keyframes-hover-ease);
+
+  span,
+  svg,
+  svg * {
+    pointer-events: none;
+  }
+
+  &:hover,
+  &[data-hovered='true'] {
+    border-color: rgba(255, 255, 255, 0.11);
+    background-color: var(--button-bg-hover);
+    color: var(--foreground);
+  }
+
+  &:disabled,
+  &[aria-disabled='true'] {
+    cursor: default;
+    opacity: 0.4;
+  }
+
+  &:disabled:hover,
+  &[aria-disabled='true']:hover {
+    border-color: rgba(255, 255, 255, 0.055);
+    background-color: var(--button-bg);
+    color: rgba(208, 208, 208, 0.65);
+  }
+}
+
+.keyframes-tool.button--icon-only.button--sm {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+}
+
+.keyframes-tool--code.button--icon-only.button--sm {
+  padding: 0 6px;
+  letter-spacing: -0.01em;
+}
+
+.keyframes-tooltip__diagram {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.tool-diagram {
+  display: block;
+  max-width: 100%;
+}
+
+.tool-diagram__key {
+  fill: currentColor;
+}
+
+.tool-diagram__key--ghost {
+  fill: currentColor;
+  opacity: 0.3;
+}
+
+.tool-diagram__key--outline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 4;
+}
+
+.tool-diagram__playhead,
+.tool-diagram__layer-marker {
+  fill: var(--accent);
+}
+
+.tool-diagram__guide,
+.tool-diagram__layer-bar {
+  fill: currentColor;
+  opacity: 0.28;
+}
+
+.tool-diagram__arrow {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+@media (max-width: 350px) {
+  .easing-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
