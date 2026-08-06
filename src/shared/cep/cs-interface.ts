@@ -16,15 +16,30 @@ type EvalHostScriptOptions = {
   reloadHostInDevelopment?: boolean
 }
 
+let cachedBridge: CepScriptBridge | undefined
+let cachedReloadScript: string | undefined
+
 function getCepScriptBridge() {
-  if (typeof window.CSInterface === 'function') {
-    return new window.CSInterface()
+  if (cachedBridge) {
+    return cachedBridge
   }
 
-  return window.__adobe_cep__
+  cachedBridge =
+    typeof window.CSInterface === 'function'
+      ? new window.CSInterface()
+      : window.__adobe_cep__
+
+  return cachedBridge
 }
 
-function getDevelopmentHostReloadScript(bridge: CepScriptBridge) {
+/**
+ * Picks up host script edits without restarting After Effects.
+ *
+ * Re-evaluating `host.jsx` also pulls in every tool file it loads, which is
+ * thousands of lines, so the generated snippet stamps the folder and only
+ * re-evaluates when a `.jsx` file actually changed on disk.
+ */
+function buildDevelopmentHostReloadScript(bridge: CepScriptBridge) {
   if (!import.meta.env.DEV || typeof bridge.getSystemPath !== 'function') {
     return ''
   }
@@ -33,17 +48,33 @@ function getDevelopmentHostReloadScript(bridge: CepScriptBridge) {
     /\/$/,
     '',
   )
-  const hostScriptPath = `${extensionPath}/jsx/host.jsx`
+  const scriptFolder = JSON.stringify(`${extensionPath}/jsx`)
+  const hostScriptPath = JSON.stringify(`${extensionPath}/jsx/host.jsx`)
 
-  return `$.evalFile(new File(${JSON.stringify(hostScriptPath)}));`
+  return `(function () {
+  var files = new Folder(${scriptFolder}).getFiles("*.jsx") || [];
+  var stamps = [];
+
+  for (var index = 0; index < files.length; index += 1) {
+    stamps.push(files[index].name + ":" + files[index].modified.getTime());
+  }
+
+  stamps.sort();
+  var stamp = stamps.join(";");
+
+  if ($.global.__sequoiaHostStamp !== stamp) {
+    $.global.__sequoiaHostStamp = stamp;
+    $.evalFile(new File(${hostScriptPath}));
+  }
+})();`
 }
 
-export function isCepRuntime() {
-  return (
-    typeof window !== 'undefined' &&
-    (typeof window.CSInterface === 'function' ||
-      typeof window.__adobe_cep__?.evalScript === 'function')
-  )
+function getDevelopmentHostReloadScript(bridge: CepScriptBridge) {
+  if (cachedReloadScript === undefined) {
+    cachedReloadScript = buildDevelopmentHostReloadScript(bridge)
+  }
+
+  return cachedReloadScript
 }
 
 export function evalHostScript(
