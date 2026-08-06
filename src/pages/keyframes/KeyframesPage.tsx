@@ -8,7 +8,6 @@ import {
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -17,6 +16,12 @@ import { evalHostScript } from '../../shared/cep/cs-interface'
 import { runHostCommand } from '../../shared/cep/host-command'
 import { addErrorLog } from '../../shared/logging/error-log'
 import { PageLayout } from '../../shared/ui/page/PageLayout'
+import {
+  tooltipCloseDelay,
+  tooltipOffset,
+  tooltipOpenDelay,
+  useHoverTooltip,
+} from '../../shared/ui/tooltip/hoverTooltip'
 import { ToolDiagram } from './ToolDiagram'
 import { keyframeDiagrams } from './toolDiagrams'
 import {
@@ -31,10 +36,6 @@ import {
   type KeyframeToolSettings,
 } from './keyframeTools'
 
-const tooltipOpenDelay = 700
-const tooltipCloseDelay = 120
-/** Clear of the trigger. HeroUI's own no-arrow default of 3px sits too close. */
-const tooltipOffset = 10
 const errorLogSource = 'Keyframes'
 
 type SegmentedOption<Value extends string> = {
@@ -106,65 +107,6 @@ const pasteOriginLabels: SegmentedOption<KeyframePasteOrigin>[] = [
     title: 'Selected Keys',
   },
 ]
-
-/**
- * Hover and focus state for a tooltip.
- *
- * After Effects delivers React Aria hover events unreliably, so the open state
- * is driven from raw mouse events instead of the built-in trigger behaviour.
- */
-function useHoverTooltip() {
-  const timerRef = useRef<number | null>(null)
-  const [isOpen, setIsOpen] = useState(false)
-
-  const clearTimer = useCallback(() => {
-    if (timerRef.current === null) {
-      return
-    }
-
-    window.clearTimeout(timerRef.current)
-    timerRef.current = null
-  }, [])
-
-  const schedule = useCallback(
-    (nextIsOpen: boolean, delay: number) => {
-      clearTimer()
-      timerRef.current = window.setTimeout(() => {
-        timerRef.current = null
-        setIsOpen(nextIsOpen)
-      }, delay)
-    },
-    [clearTimer],
-  )
-
-  const close = useCallback(() => {
-    clearTimer()
-    setIsOpen(false)
-  }, [clearTimer])
-
-  const open = useCallback(() => {
-    clearTimer()
-    setIsOpen(true)
-  }, [clearTimer])
-
-  useEffect(
-    () => () => {
-      clearTimer()
-    },
-    [clearTimer],
-  )
-
-  return {
-    close,
-    isOpen,
-    triggerProps: {
-      onBlur: close,
-      onFocus: open,
-      onMouseEnter: () => schedule(true, tooltipOpenDelay),
-      onMouseLeave: () => schedule(false, tooltipCloseDelay),
-    },
-  }
-}
 
 type TooltipInfoProps = {
   description: string
