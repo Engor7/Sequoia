@@ -595,14 +595,6 @@
     return true;
   }
 
-  var bounceLegacyExpressionMarker = "// SEQUOIA_BOUNCE_V1|";
-  var bounceExpressionMarker = "// SEQUOIA_BOUNCE_V2|";
-  var bouncePseudoEffectMatchName = "Pseudo/Sequoia Bounce";
-  var bounceControlDefaults = [20, 1, 60];
-  var overshootExpressionMarker = "// SEQUOIA_OVERSHOOT_V1|";
-  var overshootPseudoEffectMatchName = "Pseudo/Sequoia Overshoot";
-  var overshootControlDefaults = [20, 1, 60];
-
   function getPropertyIndexPath(property) {
     var path = [];
     var currentProperty = property;
@@ -639,30 +631,6 @@
       valueType === PropertyValueType.TwoD_SPATIAL ||
       valueType === PropertyValueType.ThreeD_SPATIAL
     );
-  }
-
-  function isSequoiaBounceControl(property) {
-    var currentProperty = property.parentProperty;
-
-    while (currentProperty) {
-      try {
-        if (
-          currentProperty.matchName === bouncePseudoEffectMatchName ||
-          (
-            currentProperty.matchName === "ADBE Slider Control" &&
-            currentProperty.name.indexOf("Bounce ") === 0
-          )
-        ) {
-          return true;
-        }
-      } catch (error) {
-        void error;
-      }
-
-      currentProperty = currentProperty.parentProperty;
-    }
-
-    return false;
   }
 
   function sanitizeBounceLabel(label) {
@@ -718,73 +686,18 @@
     return false;
   }
 
-  function getBounceEffect(effects, name) {
-    try {
-      var effect = effects.property(name);
 
-      if (effect && effect.matchName === bouncePseudoEffectMatchName) {
-        return effect;
-      }
-    } catch (error) {
-      void error;
-    }
-
-    return null;
-  }
-
-  function createBounceEffectName(effects, propertyName) {
-    var label = sanitizeBounceLabel(propertyName).substring(0, 15);
-    var suffix = 1;
-
-    while (suffix < 1000) {
-      var baseName = "Bounce " + label + (suffix > 1 ? " (" + suffix + ")" : "");
-
-      if (!effectNameExists(effects, baseName)) {
-        return baseName;
-      }
-
-      suffix += 1;
-    }
-
-    throw new Error("Could not create a unique Bounce effect name.");
-  }
-
-  function readBounceSetup(property) {
-    var expression = "";
-
-    try {
-      expression = property.expression || "";
-    } catch (error) {
-      void error;
-      return null;
-    }
-
-    var firstLineEnd = expression.indexOf("\n");
-    var firstLine = firstLineEnd === -1
-      ? expression
-      : expression.substring(0, firstLineEnd);
-
-    if (firstLine.indexOf(bounceExpressionMarker) === 0) {
-      var effectName = firstLine.substring(bounceExpressionMarker.length);
-
-      return effectName
-        ? { effectName: effectName, legacyControlNames: null }
-        : null;
-    }
-
-    if (firstLine.indexOf(bounceLegacyExpressionMarker) === 0) {
-      var names = firstLine
-        .substring(bounceLegacyExpressionMarker.length)
-        .split("|");
-
-      return names.length === 3
-        ? { effectName: null, legacyControlNames: names }
-        : null;
-    }
-
-    return null;
-  }
-
+  /**
+   * Bounce and Overshoot are the same mechanism: a damped oscillation driven
+   * from the last two keyframes of a property, controlled by one pseudo-effect
+   * named after that property. They differ only in their expression, their
+   * preset, and whether a legacy layout has to be migrated, so one config-driven
+   * implementation serves both.
+   *
+   * Unlike Wiggle and its siblings, these live per property rather than per
+   * layer, because Effect Controls has to show `Bounce Position` next to
+   * `Bounce Scale` when both are animated on one layer.
+   */
   function buildBounceExpression(effectName) {
     return [
       bounceExpressionMarker + effectName,
@@ -815,14 +728,168 @@
     ].join("\n");
   }
 
-  function getLegacyBounceControlValues(effects, controlNames) {
+  function buildOvershootExpression(effectName) {
+    return [
+      overshootExpressionMarker + effectName,
+      "var __sqAmount = Math.max(0, effect(" +
+        quoteExpressionString(effectName) +
+        ")(1)) / 100;",
+      "var __sqDuration = Math.max(0, effect(" +
+        quoteExpressionString(effectName) +
+        ")(2));",
+      "var __sqElasticity = Math.min(100, Math.max(0, effect(" +
+        quoteExpressionString(effectName) +
+        ")(3)));",
+      "var __sqLastTime = numKeys > 0 ? key(numKeys).time : 0;",
+      "if (numKeys < 2 || __sqAmount <= 0 || __sqDuration <= 0 || time <= __sqLastTime || time >= __sqLastTime + __sqDuration) {",
+      "  value;",
+      "} else {",
+      "  var __sqProgress = Math.min(1, Math.max(0, (time - __sqLastTime) / __sqDuration));",
+      "  var __sqCycles = 1 + __sqElasticity * 0.05;",
+      "  var __sqWave = Math.sin(__sqProgress * __sqCycles * Math.PI * 2);",
+      "  var __sqDecay = Math.pow(1 - __sqProgress, 2);",
+      "  value + (key(numKeys).value - key(numKeys - 1).value) * __sqAmount * __sqWave * __sqDecay;",
+      "}"
+    ].join("\n");
+  }
+
+  var bounceSpringConfig = {
+    buildExpression: buildBounceExpression,
+    controlDefaults: [20, 1, 60],
+    effectName: "Bounce",
+    expressionMarker: "// SEQUOIA_BOUNCE_V2|",
+    /** Older builds drove Bounce from three separate Slider Controls. */
+    legacyExpressionMarker: "// SEQUOIA_BOUNCE_V1|",
+    matchName: "Pseudo/Sequoia Bounce",
+    presetName: "SequoiaBounce.ffx"
+  };
+  var overshootSpringConfig = {
+    buildExpression: buildOvershootExpression,
+    controlDefaults: [20, 1, 60],
+    effectName: "Overshoot",
+    expressionMarker: "// SEQUOIA_OVERSHOOT_V1|",
+    legacyExpressionMarker: null,
+    matchName: "Pseudo/Sequoia Overshoot",
+    presetName: "SequoiaOvershoot.ffx"
+  };
+  /** Applying one replaces the other; a property carries at most one. */
+  bounceSpringConfig.replaces = overshootSpringConfig;
+  overshootSpringConfig.replaces = bounceSpringConfig;
+
+  var springConfigs = [bounceSpringConfig, overshootSpringConfig];
+
+  function isSpringControl(property) {
+    var currentProperty = property.parentProperty;
+
+    while (currentProperty) {
+      try {
+        for (var index = 0; index < springConfigs.length; index += 1) {
+          if (currentProperty.matchName === springConfigs[index].matchName) {
+            return true;
+          }
+        }
+
+        if (
+          currentProperty.matchName === "ADBE Slider Control" &&
+          currentProperty.name.indexOf("Bounce ") === 0
+        ) {
+          return true;
+        }
+      } catch (error) {
+        void error;
+      }
+
+      currentProperty = currentProperty.parentProperty;
+    }
+
+    return false;
+  }
+
+  function getSpringEffect(effects, config, name) {
+    try {
+      var effect = effects.property(name);
+
+      if (effect && effect.matchName === config.matchName) {
+        return effect;
+      }
+    } catch (error) {
+      void error;
+    }
+
+    return null;
+  }
+
+  function createSpringEffectName(effects, config, propertyName) {
+    var label = sanitizeBounceLabel(propertyName).substring(0, 15);
+    var suffix = 1;
+
+    while (suffix < 1000) {
+      var name =
+        config.effectName + " " + label + (suffix > 1 ? " (" + suffix + ")" : "");
+
+      if (!effectNameExists(effects, name)) {
+        return name;
+      }
+
+      suffix += 1;
+    }
+
+    throw new Error(
+      "Could not create a unique " + config.effectName + " effect name."
+    );
+  }
+
+  /**
+   * Reads the marker line the expression starts with. Returns the effect it
+   * refers to, or the legacy Slider Control names to migrate from.
+   */
+  function readSpringSetup(property, config) {
+    var expression = "";
+
+    try {
+      expression = property.expression || "";
+    } catch (error) {
+      void error;
+      return null;
+    }
+
+    var firstLineEnd = expression.indexOf("\n");
+    var firstLine = firstLineEnd === -1
+      ? expression
+      : expression.substring(0, firstLineEnd);
+
+    if (firstLine.indexOf(config.expressionMarker) === 0) {
+      var effectName = firstLine.substring(config.expressionMarker.length);
+
+      return effectName
+        ? { effectName: effectName, legacyControlNames: null }
+        : null;
+    }
+
+    if (
+      config.legacyExpressionMarker &&
+      firstLine.indexOf(config.legacyExpressionMarker) === 0
+    ) {
+      var names = firstLine
+        .substring(config.legacyExpressionMarker.length)
+        .split("|");
+
+      return names.length === config.controlDefaults.length
+        ? { effectName: null, legacyControlNames: names }
+        : null;
+    }
+
+    return null;
+  }
+
+  function getLegacySpringControlValues(effects, config, controlNames) {
     var values = [];
 
     for (var index = 0; index < controlNames.length; index += 1) {
       var control = getSliderControl(effects, controlNames[index]);
 
       if (!control) {
-        values.push(bounceControlDefaults[index]);
+        values.push(config.controlDefaults[index]);
         continue;
       }
 
@@ -830,46 +897,48 @@
         values.push(control.property(1).value);
       } catch (error) {
         void error;
-        values.push(bounceControlDefaults[index]);
+        values.push(config.controlDefaults[index]);
       }
     }
 
     return values;
   }
 
-  function getBounceEffectValues(effect) {
+  function getSpringEffectValues(effect, config) {
     var values = [];
 
-    for (var index = 0; index < bounceControlDefaults.length; index += 1) {
+    for (var index = 0; index < config.controlDefaults.length; index += 1) {
       try {
         values.push(effect.property(index + 1).value);
       } catch (error) {
         void error;
-        values.push(bounceControlDefaults[index]);
+        values.push(config.controlDefaults[index]);
       }
     }
 
     return values;
   }
 
-  function setBounceEffectValues(effect, values) {
-    for (var index = 0; index < bounceControlDefaults.length; index += 1) {
+  function setSpringEffectValues(effect, config, values) {
+    for (var index = 0; index < config.controlDefaults.length; index += 1) {
       var control = effect.property(index + 1);
 
       if (!control) {
-        throw new Error("The Bounce pseudo-effect is missing a control.");
+        throw new Error(
+          "The " + config.effectName + " pseudo-effect is missing a control."
+        );
       }
 
       control.setValue(values[index]);
     }
   }
 
-  function isCompleteBounceEffect(effect) {
+  function isCompleteSpringEffect(effect, config) {
     if (!effect) {
       return false;
     }
 
-    for (var index = 1; index <= bounceControlDefaults.length; index += 1) {
+    for (var index = 1; index <= config.controlDefaults.length; index += 1) {
       try {
         if (!effect.property(index)) {
           return false;
@@ -883,25 +952,11 @@
     return true;
   }
 
-  function getBouncePresetFile() {
-    var hostScriptFile = new File($.fileName);
-    var extensionFolder = hostScriptFile.parent.parent;
-    var presetFile = new File(
-      extensionFolder.fsName + "/assets/SequoiaBounce.ffx"
-    );
-
-    if (!presetFile.exists) {
-      throw new Error("The bundled Bounce pseudo-effect preset is missing.");
-    }
-
-    return presetFile;
-  }
-
-  function addBounceEffect(layer, effectName, values) {
+  function addSpringEffect(layer, config, effectName, values) {
     var effects = layer.property("ADBE Effect Parade");
     var previousEffectCount = effects.numProperties;
 
-    applyPresetToOnlyLayer(layer, getBouncePresetFile());
+    applyPresetToOnlyLayer(layer, getMotionPresetFile(config));
     effects = layer.property("ADBE Effect Parade");
 
     for (
@@ -911,18 +966,20 @@
     ) {
       var effect = effects.property(index);
 
-      if (effect && effect.matchName === bouncePseudoEffectMatchName) {
+      if (effect && effect.matchName === config.matchName) {
         effect.name = effectName;
-        setBounceEffectValues(effect, values);
+        setSpringEffectValues(effect, config, values);
         return effect;
       }
     }
 
-    throw new Error("After Effects did not create the Bounce pseudo-effect.");
+    throw new Error(
+      "After Effects did not create the " + config.effectName + " pseudo-effect."
+    );
   }
 
-  function removeBounceEffect(effects, effectName) {
-    var effect = getBounceEffect(effects, effectName);
+  function removeSpringEffect(effects, config, effectName) {
+    var effect = getSpringEffect(effects, config, effectName);
 
     if (!effect) {
       return;
@@ -935,7 +992,7 @@
     }
   }
 
-  function removeBounceControls(effects, controlNames) {
+  function removeSpringControls(effects, controlNames) {
     for (var index = controlNames.length - 1; index >= 0; index -= 1) {
       var control = getSliderControl(effects, controlNames[index]);
 
@@ -967,7 +1024,7 @@
     }
   }
 
-  function applyBounceToProperty(target) {
+  function applySpringToProperty(target, config) {
     var property = resolvePropertyIndexPath(target.layer, target.path);
 
     if (!property) {
@@ -982,13 +1039,12 @@
 
     var previousExpression = property.expression || "";
     var previousExpressionEnabled = property.expressionEnabled === true;
-    var previousSetup = readBounceSetup(property);
-    var previousOvershootSetup = readOvershootSetup(property);
+    var previousSetup = readSpringSetup(property, config);
+    var replacedSetup = readSpringSetup(property, config.replaces);
     var previousEffect = previousSetup && previousSetup.effectName
-      ? getBounceEffect(effects, previousSetup.effectName)
+      ? getSpringEffect(effects, config, previousSetup.effectName)
       : null;
-    var controlValues = bounceControlDefaults;
-    var effectName = null;
+    var controlValues = config.controlDefaults;
     var createdEffectName = null;
     var staleEffectName = null;
     var staleControlNames = previousSetup
@@ -996,33 +1052,33 @@
       : null;
 
     if (previousEffect) {
-      controlValues = getBounceEffectValues(previousEffect);
+      controlValues = getSpringEffectValues(previousEffect, config);
     } else if (staleControlNames) {
-      controlValues = getLegacyBounceControlValues(effects, staleControlNames);
+      controlValues = getLegacySpringControlValues(
+        effects,
+        config,
+        staleControlNames
+      );
     }
 
-    if (isCompleteBounceEffect(previousEffect)) {
+    if (isCompleteSpringEffect(previousEffect, config)) {
       return false;
     }
 
     if (previousEffect) {
       staleEffectName = previousSetup.effectName;
-      previousEffect = null;
     }
 
     try {
-      if (previousEffect) {
-        effectName = previousSetup.effectName;
-      } else {
-        effectName = createBounceEffectName(effects, target.name);
-        var newEffect = addBounceEffect(
-          target.layer,
-          effectName,
-          controlValues
-        );
-        createdEffectName = newEffect.name;
-        effectName = createdEffectName;
-      }
+      var effectName = createSpringEffectName(effects, config, target.name);
+      var newEffect = addSpringEffect(
+        target.layer,
+        config,
+        effectName,
+        controlValues
+      );
+      createdEffectName = newEffect.name;
+      effectName = createdEffectName;
 
       property = resolvePropertyIndexPath(target.layer, target.path);
 
@@ -1030,7 +1086,7 @@
         throw new Error("The selected property cannot use expressions.");
       }
 
-      property.expression = buildBounceExpression(effectName);
+      property.expression = config.buildExpression(effectName);
       property.expressionEnabled = true;
 
       if (property.expressionError) {
@@ -1040,20 +1096,21 @@
       effects = target.layer.property("ADBE Effect Parade");
 
       if (staleControlNames && staleControlNames.length > 0) {
-        removeBounceControls(effects, staleControlNames);
+        removeSpringControls(effects, staleControlNames);
       }
 
       if (staleEffectName) {
-        removeBounceEffect(effects, staleEffectName);
+        removeSpringEffect(effects, config, staleEffectName);
       }
 
-      if (previousOvershootSetup) {
-        removeOvershootEffect(effects, previousOvershootSetup.effectName);
+      if (replacedSetup && replacedSetup.effectName) {
+        removeSpringEffect(effects, config.replaces, replacedSetup.effectName);
       }
     } catch (error) {
       if (createdEffectName) {
-        removeBounceEffect(
+        removeSpringEffect(
           target.layer.property("ADBE Effect Parade"),
+          config,
           createdEffectName
         );
       }
@@ -1070,11 +1127,11 @@
     return true;
   }
 
-  function describeBounceTarget(target) {
+  function describeTarget(target) {
     return target.layer.name + " > " + target.name;
   }
 
-  function getSelectedBouncePropertyTargets(composition) {
+  function getSelectedSpringTargets(composition, config) {
     var properties = composition.selectedProperties;
     var targets = [];
 
@@ -1084,15 +1141,13 @@
       try {
         if (
           property.propertyType !== PropertyType.PROPERTY ||
-          !readBounceSetup(property)
+          !readSpringSetup(property, config)
         ) {
           continue;
         }
 
-        var layer = property.propertyGroup(property.propertyDepth);
-
         targets.push({
-          layer: layer,
+          layer: property.propertyGroup(property.propertyDepth),
           name: sanitizeBounceLabel(property.name),
           path: getPropertyIndexPath(property)
         });
@@ -1104,14 +1159,14 @@
     return targets;
   }
 
-  function removeBounceFromProperty(target) {
+  function removeSpringFromProperty(target, config) {
     var property = resolvePropertyIndexPath(target.layer, target.path);
 
     if (!property || property.canSetExpression !== true) {
       throw new Error("The selected property is no longer available.");
     }
 
-    var setup = readBounceSetup(property);
+    var setup = readSpringSetup(property, config);
 
     if (!setup) {
       return false;
@@ -1126,370 +1181,14 @@
     property.expression = "";
 
     if (setup.effectName) {
-      var effect = getBounceEffect(effects, setup.effectName);
+      var effect = getSpringEffect(effects, config, setup.effectName);
 
       if (effect) {
         effect.remove();
       }
     } else if (setup.legacyControlNames) {
-      for (
-        var index = setup.legacyControlNames.length - 1;
-        index >= 0;
-        index -= 1
-      ) {
-        var control = getSliderControl(
-          effects,
-          setup.legacyControlNames[index]
-        );
-
-        if (control) {
-          control.remove();
-        }
-      }
+      removeSpringControls(effects, setup.legacyControlNames);
     }
-
-    return true;
-  }
-
-  function isSequoiaOvershootControl(property) {
-    var currentProperty = property.parentProperty;
-
-    while (currentProperty) {
-      try {
-        if (currentProperty.matchName === overshootPseudoEffectMatchName) {
-          return true;
-        }
-      } catch (error) {
-        void error;
-      }
-
-      currentProperty = currentProperty.parentProperty;
-    }
-
-    return false;
-  }
-
-  function getOvershootEffect(effects, name) {
-    try {
-      var effect = effects.property(name);
-
-      if (effect && effect.matchName === overshootPseudoEffectMatchName) {
-        return effect;
-      }
-    } catch (error) {
-      void error;
-    }
-
-    return null;
-  }
-
-  function createOvershootEffectName(effects, propertyName) {
-    var label = sanitizeBounceLabel(propertyName).substring(0, 15);
-    var suffix = 1;
-
-    while (suffix < 1000) {
-      var baseName = "Overshoot " + label + (suffix > 1 ? " (" + suffix + ")" : "");
-
-      if (!effectNameExists(effects, baseName)) {
-        return baseName;
-      }
-
-      suffix += 1;
-    }
-
-    throw new Error("Could not create a unique Overshoot effect name.");
-  }
-
-  function readOvershootSetup(property) {
-    var expression = "";
-
-    try {
-      expression = property.expression || "";
-    } catch (error) {
-      void error;
-      return null;
-    }
-
-    var firstLineEnd = expression.indexOf("\n");
-    var firstLine = firstLineEnd === -1
-      ? expression
-      : expression.substring(0, firstLineEnd);
-
-    if (firstLine.indexOf(overshootExpressionMarker) !== 0) {
-      return null;
-    }
-
-    var effectName = firstLine.substring(overshootExpressionMarker.length);
-
-    return effectName ? { effectName: effectName } : null;
-  }
-
-  function buildOvershootExpression(effectName) {
-    return [
-      overshootExpressionMarker + effectName,
-      "var __sqAmount = Math.max(0, effect(" +
-        quoteExpressionString(effectName) +
-        ")(1)) / 100;",
-      "var __sqDuration = Math.max(0, effect(" +
-        quoteExpressionString(effectName) +
-        ")(2));",
-      "var __sqElasticity = Math.min(100, Math.max(0, effect(" +
-        quoteExpressionString(effectName) +
-        ")(3)));",
-      "var __sqLastTime = numKeys > 0 ? key(numKeys).time : 0;",
-      "if (numKeys < 2 || __sqAmount <= 0 || __sqDuration <= 0 || time <= __sqLastTime || time >= __sqLastTime + __sqDuration) {",
-      "  value;",
-      "} else {",
-      "  var __sqProgress = Math.min(1, Math.max(0, (time - __sqLastTime) / __sqDuration));",
-      "  var __sqCycles = 1 + __sqElasticity * 0.05;",
-      "  var __sqWave = Math.sin(__sqProgress * __sqCycles * Math.PI * 2);",
-      "  var __sqDecay = Math.pow(1 - __sqProgress, 2);",
-      "  value + (key(numKeys).value - key(numKeys - 1).value) * __sqAmount * __sqWave * __sqDecay;",
-      "}"
-    ].join("\n");
-  }
-
-  function getOvershootEffectValues(effect) {
-    var values = [];
-
-    for (var index = 0; index < overshootControlDefaults.length; index += 1) {
-      try {
-        values.push(effect.property(index + 1).value);
-      } catch (error) {
-        void error;
-        values.push(overshootControlDefaults[index]);
-      }
-    }
-
-    return values;
-  }
-
-  function setOvershootEffectValues(effect, values) {
-    for (var index = 0; index < overshootControlDefaults.length; index += 1) {
-      var control = effect.property(index + 1);
-
-      if (!control) {
-        throw new Error("The Overshoot pseudo-effect is missing a control.");
-      }
-
-      control.setValue(values[index]);
-    }
-  }
-
-  function isCompleteOvershootEffect(effect) {
-    if (!effect) {
-      return false;
-    }
-
-    for (var index = 1; index <= overshootControlDefaults.length; index += 1) {
-      try {
-        if (!effect.property(index)) {
-          return false;
-        }
-      } catch (error) {
-        void error;
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  function getOvershootPresetFile() {
-    var hostScriptFile = new File($.fileName);
-    var extensionFolder = hostScriptFile.parent.parent;
-    var presetFile = new File(
-      extensionFolder.fsName + "/assets/SequoiaOvershoot.ffx"
-    );
-
-    if (!presetFile.exists) {
-      throw new Error("The bundled Overshoot pseudo-effect preset is missing.");
-    }
-
-    return presetFile;
-  }
-
-  function addOvershootEffect(layer, effectName, values) {
-    var effects = layer.property("ADBE Effect Parade");
-    var previousEffectCount = effects.numProperties;
-
-    applyPresetToOnlyLayer(layer, getOvershootPresetFile());
-    effects = layer.property("ADBE Effect Parade");
-
-    for (
-      var index = effects.numProperties;
-      index > previousEffectCount;
-      index -= 1
-    ) {
-      var effect = effects.property(index);
-
-      if (effect && effect.matchName === overshootPseudoEffectMatchName) {
-        effect.name = effectName;
-        setOvershootEffectValues(effect, values);
-        return effect;
-      }
-    }
-
-    throw new Error("After Effects did not create the Overshoot pseudo-effect.");
-  }
-
-  function removeOvershootEffect(effects, effectName) {
-    var effect = getOvershootEffect(effects, effectName);
-
-    if (!effect) {
-      return;
-    }
-
-    try {
-      effect.remove();
-    } catch (error) {
-      void error;
-    }
-  }
-
-  function applyOvershootToProperty(target) {
-    var property = resolvePropertyIndexPath(target.layer, target.path);
-
-    if (!property) {
-      throw new Error("The selected property is no longer available.");
-    }
-
-    var effects = target.layer.property("ADBE Effect Parade");
-
-    if (!effects) {
-      throw new Error("The property's layer does not support effects.");
-    }
-
-    var previousExpression = property.expression || "";
-    var previousExpressionEnabled = property.expressionEnabled === true;
-    var previousSetup = readOvershootSetup(property);
-    var previousBounceSetup = readBounceSetup(property);
-    var previousEffect = previousSetup
-      ? getOvershootEffect(effects, previousSetup.effectName)
-      : null;
-    var controlValues = overshootControlDefaults;
-    var createdEffectName = null;
-    var staleEffectName = null;
-
-    if (previousEffect) {
-      controlValues = getOvershootEffectValues(previousEffect);
-    }
-
-    if (isCompleteOvershootEffect(previousEffect)) {
-      return false;
-    }
-
-    if (previousEffect) {
-      staleEffectName = previousSetup.effectName;
-    }
-
-    try {
-      var effectName = createOvershootEffectName(effects, target.name);
-      var newEffect = addOvershootEffect(
-        target.layer,
-        effectName,
-        controlValues
-      );
-      createdEffectName = newEffect.name;
-      effectName = createdEffectName;
-
-      property = resolvePropertyIndexPath(target.layer, target.path);
-
-      if (!property || property.canSetExpression !== true) {
-        throw new Error("The selected property cannot use expressions.");
-      }
-
-      property.expression = buildOvershootExpression(effectName);
-      property.expressionEnabled = true;
-
-      if (property.expressionError) {
-        throw new Error(property.expressionError);
-      }
-
-      effects = target.layer.property("ADBE Effect Parade");
-
-      if (staleEffectName) {
-        removeOvershootEffect(effects, staleEffectName);
-      }
-
-      if (previousBounceSetup) {
-        if (previousBounceSetup.effectName) {
-          removeBounceEffect(effects, previousBounceSetup.effectName);
-        } else if (previousBounceSetup.legacyControlNames) {
-          removeBounceControls(effects, previousBounceSetup.legacyControlNames);
-        }
-      }
-    } catch (error) {
-      if (createdEffectName) {
-        removeOvershootEffect(
-          target.layer.property("ADBE Effect Parade"),
-          createdEffectName
-        );
-      }
-
-      restorePropertyExpression(
-        target.layer,
-        target.path,
-        previousExpression,
-        previousExpressionEnabled
-      );
-      throw error;
-    }
-
-    return true;
-  }
-
-  function getSelectedOvershootPropertyTargets(composition) {
-    var properties = composition.selectedProperties;
-    var targets = [];
-
-    for (var index = 0; index < properties.length; index += 1) {
-      var property = properties[index];
-
-      try {
-        if (
-          property.propertyType !== PropertyType.PROPERTY ||
-          !readOvershootSetup(property)
-        ) {
-          continue;
-        }
-
-        var layer = property.propertyGroup(property.propertyDepth);
-
-        targets.push({
-          layer: layer,
-          name: sanitizeBounceLabel(property.name),
-          path: getPropertyIndexPath(property)
-        });
-      } catch (error) {
-        void error;
-      }
-    }
-
-    return targets;
-  }
-
-  function removeOvershootFromProperty(target) {
-    var property = resolvePropertyIndexPath(target.layer, target.path);
-
-    if (!property || property.canSetExpression !== true) {
-      throw new Error("The selected property is no longer available.");
-    }
-
-    var setup = readOvershootSetup(property);
-
-    if (!setup) {
-      return false;
-    }
-
-    var effects = target.layer.property("ADBE Effect Parade");
-
-    if (!effects) {
-      throw new Error("The property's layer does not support effects.");
-    }
-
-    property.expression = "";
-    removeOvershootEffect(effects, setup.effectName);
 
     return true;
   }
@@ -1969,8 +1668,7 @@
           property.propertyType !== PropertyType.PROPERTY ||
           property.canSetExpression !== true ||
           !isBounceValueType(property) ||
-          isSequoiaBounceControl(property) ||
-          isSequoiaOvershootControl(property) ||
+          isSpringControl(property) ||
           isAdditionalMotionControl(property) ||
           (predicate && !predicate(property))
         ) {
@@ -2556,37 +2254,33 @@
     return changedSegments > 0 ? "ok|" + changedSegments : "noop|0";
   };
 
-  Sequoia.removeSelectedBounce = function () {
+  function removeSelectedSpring(config) {
     var composition = app.project.activeItem;
 
     if (!(composition instanceof CompItem)) {
-      return "error|Open a composition before removing Bounce.";
+      return "error|Open a composition before removing " + config.effectName + ".";
     }
 
-    var targets = getSelectedBouncePropertyTargets(composition);
+    var targets = getSelectedSpringTargets(composition, config);
 
     if (targets.length === 0) {
-      return "error|Select at least one property with Bounce applied.";
+      return "error|Select at least one property with " + config.effectName + " applied.";
     }
 
     var removedProperties = 0;
     var errors = [];
-    app.beginUndoGroup("Remove Bounce");
+    app.beginUndoGroup("Remove " + config.effectName);
 
     try {
       for (var index = 0; index < targets.length; index += 1) {
         var target = targets[index];
 
         try {
-          if (removeBounceFromProperty(target)) {
+          if (removeSpringFromProperty(target, config)) {
             removedProperties += 1;
           }
         } catch (error) {
-          errors.push(
-            describeBounceTarget(target) +
-            ": " +
-            (error && error.toString ? error.toString() : "Unknown error.")
-          );
+          errors.push(describeTarget(target) + ": " + shared.describeError(error));
         }
       }
     } finally {
@@ -2604,22 +2298,22 @@
     return "error|" + (
       errors.length > 0
         ? errors.join("\n")
-        : "Bounce could not be removed."
+        : config.effectName + " could not be removed."
     );
-  };
+  }
 
-  Sequoia.applyBounce = function () {
-    var composition = app.project.activeItem;
-
-    if (!(composition instanceof CompItem)) {
-      return "error|Open a composition before applying Bounce.";
-    }
-
+  /**
+   * Collects the selected properties that can carry the effect, reporting why
+   * each rejected property was skipped.
+   */
+  function collectSpringTargets(composition, config) {
     var selectedProperties = composition.selectedProperties;
-    var targets = [];
-    var errors = [];
-    var selectedValueProperties = 0;
-    var unchangedProperties = 0;
+    var result = {
+      errors: [],
+      selectedValueProperties: 0,
+      targets: [],
+      unchanged: 0
+    };
 
     for (var index = 0; index < selectedProperties.length; index += 1) {
       var property = selectedProperties[index];
@@ -2629,32 +2323,31 @@
           continue;
         }
 
-        selectedValueProperties += 1;
+        result.selectedValueProperties += 1;
 
         var layer = property.propertyGroup(property.propertyDepth);
         var propertyName = sanitizeBounceLabel(property.name);
-        var targetDescription = layer.name + " > " + propertyName;
+        var description = layer.name + " > " + propertyName;
 
-        if (
-          isSequoiaBounceControl(property) ||
-          isSequoiaOvershootControl(property)
-        ) {
-          errors.push(targetDescription + ": select the animated property, not a motion effect control.");
+        if (isSpringControl(property)) {
+          result.errors.push(
+            description + ": select the animated property, not a motion effect control."
+          );
           continue;
         }
 
         if (property.numKeys < 2) {
-          errors.push(targetDescription + ": at least two keyframes are required.");
+          result.errors.push(description + ": at least two keyframes are required.");
           continue;
         }
 
         if (!isBounceValueType(property)) {
-          errors.push(targetDescription + ": this property type is not supported.");
+          result.errors.push(description + ": this property type is not supported.");
           continue;
         }
 
         if (property.canSetExpression !== true) {
-          errors.push(targetDescription + ": expressions are not supported.");
+          result.errors.push(description + ": expressions are not supported.");
           continue;
         }
 
@@ -2668,42 +2361,57 @@
           !finalValue ||
           previousValue.length !== finalValue.length
         ) {
-          errors.push(targetDescription + ": the final keyframe values are incompatible.");
+          result.errors.push(
+            description + ": the final keyframe values are incompatible."
+          );
           continue;
         }
 
         var effects = layer.property("ADBE Effect Parade");
 
         if (!effects) {
-          errors.push(targetDescription + ": the layer does not support effects.");
+          result.errors.push(description + ": the layer does not support effects.");
           continue;
         }
 
-        var existingSetup = readBounceSetup(property);
+        var existingSetup = readSpringSetup(property, config);
         var existingEffect = existingSetup && existingSetup.effectName
-          ? getBounceEffect(effects, existingSetup.effectName)
+          ? getSpringEffect(effects, config, existingSetup.effectName)
           : null;
 
-        if (isCompleteBounceEffect(existingEffect)) {
-          unchangedProperties += 1;
+        if (isCompleteSpringEffect(existingEffect, config)) {
+          result.unchanged += 1;
           continue;
         }
 
-        targets.push({
+        result.targets.push({
           layer: layer,
           name: propertyName,
           path: getPropertyIndexPath(property)
         });
       } catch (error) {
-        errors.push(
+        result.errors.push(
           (property && property.name ? property.name : "Selected property") +
-          ": " +
-          (error && error.toString ? error.toString() : "Unknown error.")
+          ": " + shared.describeError(error)
         );
       }
     }
 
-    if (targets.length === 0) {
+    return result;
+  }
+
+  function applySpring(config) {
+    var composition = app.project.activeItem;
+
+    if (!(composition instanceof CompItem)) {
+      return "error|Open a composition before applying " + config.effectName + ".";
+    }
+
+    var collected = collectSpringTargets(composition, config);
+    var errors = collected.errors;
+    var unchangedProperties = collected.unchanged;
+
+    if (collected.targets.length === 0) {
       if (unchangedProperties > 0 && errors.length === 0) {
         return "noop|" + unchangedProperties;
       }
@@ -2713,31 +2421,27 @@
       }
 
       return "error|" + (
-        selectedValueProperties > 0
-          ? "No selected property can use Bounce."
+        collected.selectedValueProperties > 0
+          ? "No selected property can use " + config.effectName + "."
           : "Select at least one animated numeric property with two or more keyframes."
       );
     }
 
     var appliedProperties = 0;
-    app.beginUndoGroup("Apply Bounce");
+    app.beginUndoGroup("Apply " + config.effectName);
 
     try {
-      for (var targetIndex = 0; targetIndex < targets.length; targetIndex += 1) {
-        var target = targets[targetIndex];
+      for (var index = 0; index < collected.targets.length; index += 1) {
+        var target = collected.targets[index];
 
         try {
-          if (applyBounceToProperty(target)) {
+          if (applySpringToProperty(target, config)) {
             appliedProperties += 1;
           } else {
             unchangedProperties += 1;
           }
         } catch (error) {
-          errors.push(
-            describeBounceTarget(target) +
-            ": " +
-            (error && error.toString ? error.toString() : "Unknown error.")
-          );
+          errors.push(describeTarget(target) + ": " + shared.describeError(error));
         }
       }
     } finally {
@@ -2759,225 +2463,26 @@
     return "error|" + (
       errors.length > 0
         ? errors.join("\n")
-        : "Bounce could not be applied."
+        : config.effectName + " could not be applied."
     );
+  }
+
+  Sequoia.applyBounce = function () {
+    return applySpring(bounceSpringConfig);
   };
 
-  Sequoia.removeSelectedOvershoot = function () {
-    var composition = app.project.activeItem;
-
-    if (!(composition instanceof CompItem)) {
-      return "error|Open a composition before removing Overshoot.";
-    }
-
-    var targets = getSelectedOvershootPropertyTargets(composition);
-
-    if (targets.length === 0) {
-      return "error|Select at least one property with Overshoot applied.";
-    }
-
-    var removedProperties = 0;
-    var errors = [];
-    app.beginUndoGroup("Remove Overshoot");
-
-    try {
-      for (var index = 0; index < targets.length; index += 1) {
-        var target = targets[index];
-
-        try {
-          if (removeOvershootFromProperty(target)) {
-            removedProperties += 1;
-          }
-        } catch (error) {
-          errors.push(
-            describeBounceTarget(target) +
-            ": " +
-            (error && error.toString ? error.toString() : "Unknown error.")
-          );
-        }
-      }
-    } finally {
-      app.endUndoGroup();
-    }
-
-    if (removedProperties > 0 && errors.length === 0) {
-      return "ok|" + removedProperties;
-    }
-
-    if (removedProperties > 0) {
-      return "partial|" + removedProperties + "|" + errors.join("\n");
-    }
-
-    return "error|" + (
-      errors.length > 0
-        ? errors.join("\n")
-        : "Overshoot could not be removed."
-    );
+  Sequoia.removeSelectedBounce = function () {
+    return removeSelectedSpring(bounceSpringConfig);
   };
 
   Sequoia.applyOvershoot = function () {
-    var composition = app.project.activeItem;
-
-    if (!(composition instanceof CompItem)) {
-      return "error|Open a composition before applying Overshoot.";
-    }
-
-    var selectedProperties = composition.selectedProperties;
-    var targets = [];
-    var errors = [];
-    var selectedValueProperties = 0;
-    var unchangedProperties = 0;
-
-    for (var index = 0; index < selectedProperties.length; index += 1) {
-      var property = selectedProperties[index];
-
-      try {
-        if (property.propertyType !== PropertyType.PROPERTY) {
-          continue;
-        }
-
-        selectedValueProperties += 1;
-
-        var layer = property.propertyGroup(property.propertyDepth);
-        var propertyName = sanitizeBounceLabel(property.name);
-        var targetDescription = layer.name + " > " + propertyName;
-
-        if (
-          isSequoiaBounceControl(property) ||
-          isSequoiaOvershootControl(property)
-        ) {
-          errors.push(targetDescription + ": select the animated property, not a motion effect control.");
-          continue;
-        }
-
-        if (property.numKeys < 2) {
-          errors.push(targetDescription + ": at least two keyframes are required.");
-          continue;
-        }
-
-        if (!isBounceValueType(property)) {
-          errors.push(targetDescription + ": this property type is not supported.");
-          continue;
-        }
-
-        if (property.canSetExpression !== true) {
-          errors.push(targetDescription + ": expressions are not supported.");
-          continue;
-        }
-
-        var previousValue = getNumberComponents(
-          property.keyValue(property.numKeys - 1)
-        );
-        var finalValue = getNumberComponents(property.keyValue(property.numKeys));
-
-        if (
-          !previousValue ||
-          !finalValue ||
-          previousValue.length !== finalValue.length
-        ) {
-          errors.push(targetDescription + ": the final keyframe values are incompatible.");
-          continue;
-        }
-
-        var effects = layer.property("ADBE Effect Parade");
-
-        if (!effects) {
-          errors.push(targetDescription + ": the layer does not support effects.");
-          continue;
-        }
-
-        var existingSetup = readOvershootSetup(property);
-        var existingEffect = existingSetup
-          ? getOvershootEffect(effects, existingSetup.effectName)
-          : null;
-
-        if (isCompleteOvershootEffect(existingEffect)) {
-          unchangedProperties += 1;
-          continue;
-        }
-
-        targets.push({
-          layer: layer,
-          name: propertyName,
-          path: getPropertyIndexPath(property)
-        });
-      } catch (error) {
-        errors.push(
-          (property && property.name ? property.name : "Selected property") +
-          ": " +
-          (error && error.toString ? error.toString() : "Unknown error.")
-        );
-      }
-    }
-
-    if (targets.length === 0) {
-      if (unchangedProperties > 0 && errors.length === 0) {
-        return "noop|" + unchangedProperties;
-      }
-
-      if (errors.length > 0) {
-        return "error|" + errors.join("\n");
-      }
-
-      return "error|" + (
-        selectedValueProperties > 0
-          ? "No selected property can use Overshoot."
-          : "Select at least one animated numeric property with two or more keyframes."
-      );
-    }
-
-    var appliedProperties = 0;
-    app.beginUndoGroup("Apply Overshoot");
-
-    try {
-      for (var targetIndex = 0; targetIndex < targets.length; targetIndex += 1) {
-        var target = targets[targetIndex];
-
-        try {
-          if (applyOvershootToProperty(target)) {
-            appliedProperties += 1;
-          } else {
-            unchangedProperties += 1;
-          }
-        } catch (error) {
-          errors.push(
-            describeBounceTarget(target) +
-            ": " +
-            (error && error.toString ? error.toString() : "Unknown error.")
-          );
-        }
-      }
-    } finally {
-      app.endUndoGroup();
-    }
-
-    if (appliedProperties > 0 && errors.length === 0) {
-      return "ok|" + appliedProperties;
-    }
-
-    if (appliedProperties > 0) {
-      return "partial|" + appliedProperties + "|" + errors.join("\n");
-    }
-
-    if (unchangedProperties > 0 && errors.length === 0) {
-      return "noop|" + unchangedProperties;
-    }
-
-    return "error|" + (
-      errors.length > 0
-        ? errors.join("\n")
-        : "Overshoot could not be applied."
-    );
+    return applySpring(overshootSpringConfig);
   };
 
-  /**
-   * Ids of every motion effect present in the current selection, comma
-   * separated, for example "wiggle,bounce".
-   *
-   * The panel polls this while the Main page is open. One call covers all of
-   * the effects so the selection is read once per poll instead of once per
-   * effect button.
-   */
+  Sequoia.removeSelectedOvershoot = function () {
+    return removeSelectedSpring(overshootSpringConfig);
+  };
+
   Sequoia.getSelectedMotionEffects = function () {
     var composition = app.project.activeItem;
 
@@ -2997,12 +2502,12 @@
       }
     }
 
-    if (getSelectedBouncePropertyTargets(composition).length > 0) {
-      found.push("bounce");
-    }
+    for (var springIndex = 0; springIndex < springConfigs.length; springIndex += 1) {
+      var springConfig = springConfigs[springIndex];
 
-    if (getSelectedOvershootPropertyTargets(composition).length > 0) {
-      found.push("overshoot");
+      if (getSelectedSpringTargets(composition, springConfig).length > 0) {
+        found.push(springConfig.effectName.toLowerCase());
+      }
     }
 
     return found.join(",");
