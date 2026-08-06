@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sequoia</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: #1d1d1d;
+        color: #d0d0d0;
+      }
+
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+        padding: 24px;
+      }
+
+      main {
+        display: grid;
+        gap: 12px;
+        justify-items: center;
+      }
+
+      p {
+        max-width: 280px;
+        margin: 0;
+        color: #b0b0b0;
+        font-size: 13px;
+        line-height: 1.5;
+        text-align: center;
+      }
+
+      code {
+        color: #ebebeb;
+      }
+    </style>
+    <script>
+      /**
+       * Panel entry point. Prefers the Vite dev server so source edits hot
+       * reload inside After Effects, and falls back to the production build so
+       * an installed panel works with no dev server running.
+       */
+      const devUrl = 'http://127.0.0.1:5173/'
+      const buildUrl = '../dist/index.html'
+      const retryDelay = 1000
+      /** Give the dev server a head start before falling back to a build. */
+      const devPreferenceWindow = 2500
+
+      const startedAt = Date.now()
+
+      function setMessage(html) {
+        document.body.innerHTML = '<main>' + html + '</main>'
+      }
+
+      function probeDevServer() {
+        return fetch(devUrl, { cache: 'no-store', mode: 'no-cors' })
+      }
+
+      /**
+       * `fetch` cannot read `file:` URLs, so the build is probed over XHR. CEP
+       * runs with `--allow-file-access-from-files`, and a local read reports
+       * status 0 rather than 200.
+       */
+      function probeBuild() {
+        return new Promise((resolve) => {
+          const request = new XMLHttpRequest()
+
+          request.onload = () =>
+            resolve(
+              (request.status === 0 || request.status === 200) &&
+                request.responseText.length > 0,
+            )
+          request.onerror = () => resolve(false)
+          request.ontimeout = () => resolve(false)
+
+          try {
+            request.open('GET', buildUrl, true)
+            request.timeout = 2000
+            request.send()
+          } catch (error) {
+            resolve(false)
+          }
+        })
+      }
+
+      async function connect() {
+        try {
+          await probeDevServer()
+          window.location.replace(devUrl + '?cep=' + Date.now())
+          return
+        } catch (error) {
+          // The dev server is not up; a production build may still be present.
+        }
+
+        if (Date.now() - startedAt >= devPreferenceWindow && (await probeBuild())) {
+          window.location.replace(buildUrl)
+          return
+        }
+
+        setMessage(
+          '<p>Waiting for the Sequoia dev server at <code>127.0.0.1:5173</code>.</p>' +
+            '<p>Start it with <code>npm run dev</code>, or build the panel once with <code>npm run build</code> to run without it.</p>',
+        )
+        window.setTimeout(connect, retryDelay)
+      }
+
+      window.addEventListener('DOMContentLoaded', connect)
+    </script>
+  </head>
+  <body>
+    <main>
+      <p>Starting Sequoia...</p>
+    </main>
+  </body>
+</html>

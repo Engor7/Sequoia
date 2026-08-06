@@ -23,7 +23,7 @@
     <Extension Id="com.sequoia.panel">
       <DispatchInfo>
         <Resources>
-          <MainPath>./cep/dev.html</MainPath>
+          <MainPath>./cep/panel.html</MainPath>
           <ScriptPath>./jsx/host.jsx</ScriptPath>
           <CEFCommandLine>
             <Parameter>--allow-file-access</Parameter>

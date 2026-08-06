@@ -2,6 +2,18 @@
 
 Sequoia is a CEP panel for Adobe After Effects.
 
+## How the panel loads
+
+`CSXS/manifest.xml` points at `cep/panel.html`, which picks a source at startup:
+
+1. The Vite dev server on `http://127.0.0.1:5173/`, when it is reachable.
+2. Otherwise the production build in `dist/`.
+3. If neither exists, it shows what to run and keeps retrying.
+
+So a development panel hot reloads, and an installed panel works with no dev
+server. `dist/` is not committed — run `npm run build` once before using the
+panel without Vite, and before packaging the extension folder for someone else.
+
 ## Development
 
 1. Enable unsigned CEP extensions for CSXS 12:
@@ -18,9 +30,8 @@ npm run dev
 
 3. In After Effects 2026, open `Window > Extensions (Legacy) > Sequoia`.
 
-The CEP panel loads `http://127.0.0.1:5173/` in development, so React changes update through Vite HMR without restarting After Effects.
-If the panel opens before the dev server is ready, it retries automatically and connects once Vite starts.
-Use `Cmd+R`, `Ctrl+R`, or `F5` inside the panel to force a reload without restarting After Effects.
+React changes update through Vite HMR without restarting After Effects.
+Use `Cmd+R`, `Ctrl+R`, or `F5` inside the panel to force a reload.
 
 ## Checks
 
