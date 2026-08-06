@@ -1,0 +1,220 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  background: var(--background);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/**
+ * A definite height, not `min-height`. The panel is the scroll viewport: the
+ * shell below sizes its content row against this chain, and only a definite
+ * height makes that row stop at the panel edge instead of growing to fit.
+ */
+html,
+body,
+#root {
+  min-width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/**
+ * `height`, not `min-height: 100vh`. Under `min-height` the shell's own height
+ * stays indefinite, so the `1fr` content row resolves against its content and
+ * grows past the panel — `.page-content` then never overflows, its `overflow`
+ * never engages, and `body { overflow: hidden }` silently clips everything
+ * below the fold. Measured in Chromium: a 1838px page left the row 1838px tall
+ * inside a 533px viewport with nothing scrollable. A definite height pins the
+ * row to the leftover space and hands the overflow to `.page-content`.
+ */
+.app-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  background: var(--background);
+}
+
+.app-header {
+  min-width: 0;
+  padding: 4px;
+  border-top: 1px solid var(--border-secondary);
+  border-bottom: 1px solid var(--border-secondary);
+  background: var(--surface);
+}
+
+.page-navigation {
+  display: flex;
+  min-width: 0;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.page-navigation__item {
+  display: flex;
+  flex: 1 1 30px;
+  min-width: 24px;
+  max-width: 32px;
+}
+
+.page-navigation__button {
+  width: 100%;
+  min-width: 24px;
+  height: 30px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease-out,
+    color 160ms ease-out,
+    outline-color 160ms ease-out,
+    transform 120ms ease-out;
+
+  svg,
+  svg * {
+    pointer-events: none;
+  }
+
+  &:hover,
+  &[data-hovered='true'] {
+    color: var(--foreground);
+    background-color: var(--default);
+  }
+
+  &[aria-current='page'] {
+    color: var(--accent-soft-foreground);
+    background: var(--accent-soft);
+    outline: 1px solid rgba(64, 150, 243, 0.28);
+    outline-offset: -1px;
+  }
+
+  &[aria-current='page']:hover,
+  &[aria-current='page'][data-hovered='true'] {
+    color: var(--accent-soft-foreground);
+    background: var(--accent-soft-hover);
+  }
+}
+
+.page-navigation__button svg.page-navigation__icon[data-slot='icon'] {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  transform-origin: center;
+}
+
+.page-navigation__tooltip {
+  padding: 5px 8px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  color: var(--overlay-foreground);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/**
+ * The scroll viewport spans the whole panel so its scrollbar sits on the panel
+ * edge. The reading width is capped on `.tool-page` inside it instead, which
+ * leaves narrow panels — the common case — laid out exactly as before.
+ *
+ * The scrollbar is drawn rather than left native: macOS hands CEP an overlay
+ * scrollbar that measures 0px and stays invisible until the wheel moves, so a
+ * page with more below it looks identical to one that fits — measured in the
+ * live panel, `offsetWidth - clientWidth` was 0 on every page. Styling
+ * `::-webkit-scrollbar` turns it into a classic scrollbar that is always
+ * visible; `scrollbar-gutter` then reserves its track on every page, so
+ * switching between a page that overflows and one that does not never shifts
+ * the content sideways. Both are supported by CEP's Chromium 99 — verified in
+ * the panel; the standard `scrollbar-width`/`scrollbar-color` pair is not.
+ */
+.page-content {
+  --scrollbar-size: 10px;
+
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+
+  &::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+  }
+
+  &::-webkit-scrollbar-track,
+  &::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track);
+  }
+
+  /**
+   * The transparent border plus `padding-box` clipping is what keeps the thumb
+   * a 6px pill inside a 10px track, instead of a bar filling the full gutter.
+   * `:hover` is restated outside any hover-capability query because CEP
+   * reports `hover: hover` as false while still firing CSS `:hover`.
+   */
+  &::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--scrollbar-thumb);
+    background-clip: padding-box;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: padding-box;
+  }
+}
+
+/**
+ * The right padding pays for the reserved gutter, so the text edge sits the
+ * same 12px from both panel edges whether or not the page scrolls.
+ */
+.tool-page {
+  max-width: 550px;
+  min-width: 0;
+  padding: 14px calc(12px - var(--scrollbar-size, 0px)) 24px 12px;
+}
+
+.tool-page__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0;
+}
+
+.tool-page__content {
+  margin-top: 14px;
+}
+
+.tool-page__content--flush {
+  margin-top: 0;
+}

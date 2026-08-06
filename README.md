@@ -39,7 +39,26 @@ Use `Cmd+R`, `Ctrl+R`, or `F5` inside the panel to force a reload.
 npm run check
 ```
 
+`npm run check` covers types, lint and the build. It cannot cover anything that
+touches After Effects. Pseudo-effects, presets and expressions have to be
+exercised in the host, by running `scripts/verify-easing-tools.jsx` through
+`File > Scripts > Run Script File...` in After Effects 2026. It builds a
+throwaway composition, drives the host API, and writes a pass/fail report to
+`/tmp/sequoia-easing-tools-report.txt`.
+
 HeroUI v3 and Tailwind CSS v4 are intentionally used as the modern UI baseline. Because CEP 12 uses an older Chromium runtime, verify visual behavior inside After Effects before depending on newer CSS features.
+
+## Pseudo-effect presets
+
+The bundled `.ffx` files in `assets/` are generated from `SequoiaBounce.ffx`
+rather than hand-edited:
+
+```sh
+npm run generate:presets
+```
+
+The generators are reproducible — a run with no source change rewrites the
+same bytes.
 
 ## Icons
 

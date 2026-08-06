@@ -1,0 +1,325 @@
+.keyframes-page {
+  /**
+   * One easing for every hover on the page, so the tools, the segments and the
+   * number fields settle at the same rate instead of each running HeroUI's own
+   * timing. Slower than the 140ms this used to run at — at that length the
+   * change reads as a snap rather than a fade.
+   */
+  --keyframes-hover-duration: 200ms;
+  --keyframes-hover-ease: cubic-bezier(0.33, 1, 0.68, 1);
+
+  /**
+   * Outer height of a controls row. The header reserves it whether or not the
+   * section has controls, so every section's tools start on the same line and
+   * the two grid columns stay level.
+   */
+  --keyframes-control-height: 18px;
+
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 30px 18px;
+  min-width: 0;
+}
+
+/* A section left without a partner takes the whole row. */
+.keyframes-section:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* Two columns of tool buttons stop fitting in a narrow panel. */
+@media (max-width: 400px) {
+  .keyframes-page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.keyframes-section {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* Title on the left, its controls pushed to the right edge of the section. */
+.keyframes-section__header {
+  display: flex;
+  min-width: 0;
+  min-height: var(--keyframes-control-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.keyframes-section__title {
+  margin: 0;
+  color: #b2b2b2;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 13px;
+  text-transform: uppercase;
+}
+
+.keyframes-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.keyframes-control.tooltip__trigger {
+  display: flex;
+  flex: none;
+  outline: none;
+}
+
+.keyframes-field {
+  width: 30px;
+  min-width: 0;
+  gap: 0;
+}
+
+/**
+ * Same 18px shell as the segmented track next to it, so the pair reads as one
+ * control row. The border stays transparent until focus, which keeps the
+ * outer size stable and leaves the focus ring to HeroUI's field tokens. The
+ * `:hover` rule is restated outside `@media (hover: hover)` because CEP
+ * reports that query as false while still firing CSS `:hover`.
+ */
+.keyframes-field__group.number-field__group {
+  height: var(--keyframes-control-height);
+  min-height: var(--keyframes-control-height);
+  border-width: 1px;
+  border-color: transparent;
+  border-radius: calc(var(--radius) * 2.5);
+  background: var(--field-background);
+  box-shadow: none;
+  grid-template-columns: minmax(0, 1fr);
+  transition:
+    background-color var(--keyframes-hover-duration) var(--keyframes-hover-ease),
+    border-color var(--keyframes-hover-duration) var(--keyframes-hover-ease);
+
+  &:hover:not(:focus-within),
+  &[data-hovered='true']:not([data-focus-within='true']) {
+    border-color: transparent;
+    background: var(--field-hover);
+  }
+
+  &:focus-within,
+  &[data-focus-within='true'] {
+    border-color: var(--field-border-focus);
+    background: var(--field-focus);
+  }
+}
+
+.keyframes-field__input.number-field__input {
+  height: 16px;
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.keyframes-segmented.tabs {
+  gap: 0;
+}
+
+.keyframes-segmented__track.tabs__list-container {
+  width: fit-content;
+  background: var(--field-background);
+
+  /**
+   * A handful of two-letter segments never overflows, so the scroll chevrons
+   * and the fading edges only ever show up on a sub-pixel miscount.
+   */
+  > .tabs__list-container__scroll-prev,
+  > .tabs__list-container__scroll-next {
+    display: none;
+  }
+
+  /**
+   * The list is `inline-flex`, so as an inline-level box it sits on this
+   * element's baseline and the line-box strut adds its descender underneath —
+   * the track measured 24px around 20px of segments and pushed them off the
+   * vertical centre. Making the scroller a flex container blockifies the list,
+   * so the track is exactly as tall as the segments it holds.
+   */
+  .tabs__list-container__scroller {
+    display: flex;
+    overflow: visible;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+}
+
+.keyframes-segmented__list.tabs__list {
+  min-width: 0;
+  padding: 1px;
+}
+
+/**
+ * The selected segment is carried by its fill alone. HeroUI puts a
+ * `shadow-surface` hairline on the indicator, which at this size reads as an
+ * outline drawn around the active label rather than as a raised surface.
+ */
+.keyframes-segmented .tabs__indicator {
+  box-shadow: none;
+}
+
+/**
+ * Only the metrics are ours; the colours stay on HeroUI's tokens. Both the
+ * selected colour and the pointer are restated because CEP leaves `:hover`
+ * visuals behind `@media (hover: hover)` unapplied.
+ */
+/**
+ * `flex: none` with an auto width is what makes the padding real. HeroUI sizes
+ * a tab with `w-full`, so every segment in a row takes the same flex base,
+ * overflows, and shrinks back to an identical width — a long label like `Keys`
+ * was left with 4px of side padding while `In` got 12px. Sizing each segment
+ * to its own text keeps the 8px even across labels; the track is
+ * `width: fit-content`, so the row stays exactly as wide as it was.
+ */
+.keyframes-segmented__option.tabs__tab {
+  /* The 1px of track padding on each side brings the shell back up to size. */
+  height: calc(var(--keyframes-control-height) - 2px);
+  width: auto;
+  flex: none;
+  min-width: 22px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--keyframes-hover-duration) var(--keyframes-hover-ease),
+    background-color var(--keyframes-hover-duration) var(--keyframes-hover-ease);
+
+  &:not([data-selected='true']):hover,
+  &[data-hovered='true']:not([data-selected='true']) {
+    color: var(--foreground);
+  }
+
+  &[data-selected='true'] {
+    color: var(--segment-foreground);
+  }
+}
+
+/* One row of equal columns, so the tools always fill the section width. */
+.keyframes-tools {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: 4px;
+}
+
+.keyframes-tool {
+  --button-bg: rgba(255, 255, 255, 0.015);
+  --button-bg-hover: rgba(255, 255, 255, 0.055);
+  --button-bg-pressed: rgba(255, 255, 255, 0.085);
+
+  padding: 0;
+  border-color: rgba(255, 255, 255, 0.055);
+  border-radius: 5px;
+  color: rgba(208, 208, 208, 0.65);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color var(--keyframes-hover-duration) var(--keyframes-hover-ease),
+    border-color var(--keyframes-hover-duration) var(--keyframes-hover-ease),
+    color var(--keyframes-hover-duration) var(--keyframes-hover-ease);
+
+  span,
+  svg,
+  svg * {
+    pointer-events: none;
+  }
+
+  &:hover,
+  &[data-hovered='true'] {
+    border-color: rgba(255, 255, 255, 0.11);
+    background-color: var(--button-bg-hover);
+    color: var(--foreground);
+  }
+
+  &:disabled,
+  &[aria-disabled='true'] {
+    cursor: default;
+    opacity: 0.4;
+  }
+
+  &:disabled:hover,
+  &[aria-disabled='true']:hover {
+    border-color: rgba(255, 255, 255, 0.055);
+    background-color: var(--button-bg);
+    color: rgba(208, 208, 208, 0.65);
+  }
+}
+
+.keyframes-tool.button--icon-only.button--sm {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+}
+
+.keyframes-tool--code.button--icon-only.button--sm {
+  padding: 0 6px;
+  letter-spacing: -0.01em;
+}
+
+.keyframes-tooltip__diagram {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.tool-diagram {
+  display: block;
+  max-width: 100%;
+}
+
+.tool-diagram__key {
+  fill: currentColor;
+}
+
+.tool-diagram__key--ghost {
+  fill: currentColor;
+  opacity: 0.3;
+}
+
+.tool-diagram__key--outline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 4;
+}
+
+.tool-diagram__playhead,
+.tool-diagram__layer-marker {
+  fill: var(--accent);
+}
+
+.tool-diagram__guide,
+.tool-diagram__layer-bar {
+  fill: currentColor;
+  opacity: 0.28;
+}
+
+.tool-diagram__arrow {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+@media (max-width: 350px) {
+  .easing-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

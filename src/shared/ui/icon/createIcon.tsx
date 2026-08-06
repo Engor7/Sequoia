@@ -1,4 +1,4 @@
-import { forwardRef, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { SvgIcon, type IconProps } from './SvgIcon'
 
 /**
@@ -9,11 +9,13 @@ export function createIcon(
   viewBox: string,
   artwork: ReactNode,
 ) {
-  const Icon = forwardRef<SVGSVGElement, IconProps>((props, ref) => (
-    <SvgIcon ref={ref} {...props} viewBox={viewBox}>
-      {artwork}
-    </SvgIcon>
-  ))
+  function Icon(props: IconProps) {
+    return (
+      <SvgIcon {...props} viewBox={viewBox}>
+        {artwork}
+      </SvgIcon>
+    )
+  }
 
   Icon.displayName = displayName
 

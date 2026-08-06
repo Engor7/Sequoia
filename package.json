@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "tsc -b && vite build",
-    "generate:motion-presets": "node scripts/generate-motion-presets.mjs && node scripts/generate-color-presets.mjs",
+    "generate:presets": "node scripts/generate-motion-presets.mjs && node scripts/generate-overshoot-preset.mjs && node scripts/generate-color-presets.mjs",
     "typecheck": "tsc -b",
     "lint": "oxlint",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",

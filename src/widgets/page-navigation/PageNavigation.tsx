@@ -1,8 +1,6 @@
 import { Button, Tooltip } from '@heroui/react'
+import { tooltipOffset } from '../../shared/ui/tooltip/hoverTooltip'
 import { pageItems, type PageId } from './pageItems'
-
-/** Clear of the trigger. HeroUI's own no-arrow default of 3px sits too close. */
-const tooltipOffset = 10
 
 type PageNavigationProps = {
   activePage: PageId
