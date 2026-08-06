@@ -1,37 +1,21 @@
 /* oxlint-disable no-unused-vars -- ExtendScript requires a catch binding. */
 (function (global) {
   var Sequoia = global.Sequoia || {};
+  var shared = global.SequoiaShared;
+  var applyPresetToOnlyLayer = shared.applyPresetToOnlyLayer;
+  var describeError = shared.describeError;
+  var getActiveComposition = shared.getActiveComposition;
+  var getSelectedLayerList = shared.getSelectedLayerList;
+  var pushUniqueLayer = shared.pushUniqueLayer;
+  var resultError = shared.resultError;
+  var resultPartial = shared.resultPartial;
+  var resultSuccess = shared.resultSuccess;
   var SHAPE_ROOT = "ADBE Root Vectors Group";
   var SHAPE_CONTENTS = "ADBE Vectors Group";
   var VECTOR_TRANSFORM = "ADBE Vector Transform Group";
   var COLOR_CONTROLS_EFFECT_NAME = "Color Controls";
   var COLOR_CONTROLS_MATCH_NAME_PREFIX = "Pseudo/SQ Color Controls ";
   var COLOR_CONTROLS_MAX_COLORS = 16;
-
-  function resultError(reason, details) {
-    return {
-      ok: false,
-      reason: reason || "operationFailed",
-      details: details || ""
-    };
-  }
-
-  function resultSuccess(count, details) {
-    return {
-      ok: true,
-      count: count || 0,
-      details: details || ""
-    };
-  }
-
-  function resultPartial(count, details) {
-    return {
-      ok: true,
-      partial: true,
-      count: count || 0,
-      details: details || ""
-    };
-  }
 
   function reasonMessage(reason) {
     if (reason === "noSelection") {
@@ -58,72 +42,7 @@
   }
 
   function formatResult(result) {
-    if (result && result.ok) {
-      if (result.partial) {
-        return "partial|" + result.count + "|" + result.details;
-      }
-
-      return "ok|" + Math.max(1, result.count || 0);
-    }
-
-    var message = result && result.details
-      ? result.details
-      : reasonMessage(result ? result.reason : "operationFailed");
-
-    return "error|" + message;
-  }
-
-  function describeError(error) {
-    return error && error.toString
-      ? error.toString()
-      : "Unknown After Effects error.";
-  }
-
-  function getActiveComposition() {
-    var composition = app.project.activeItem;
-    return composition instanceof CompItem ? composition : null;
-  }
-
-  function pushUniqueLayer(layers, layer) {
-    if (!layer) {
-      return;
-    }
-
-    for (var index = 0; index < layers.length; index += 1) {
-      if (layers[index] === layer) {
-        return;
-      }
-    }
-
-    layers.push(layer);
-  }
-
-  function getSelectedLayerList(composition) {
-    var layers = [];
-    var selectedLayers = composition.selectedLayers || [];
-    var selectedProperties = composition.selectedProperties || [];
-
-    for (var layerIndex = 0; layerIndex < selectedLayers.length; layerIndex += 1) {
-      pushUniqueLayer(layers, selectedLayers[layerIndex]);
-    }
-
-    for (
-      var propertyIndex = 0;
-      propertyIndex < selectedProperties.length;
-      propertyIndex += 1
-    ) {
-      try {
-        var property = selectedProperties[propertyIndex];
-        pushUniqueLayer(
-          layers,
-          property.propertyGroup(property.propertyDepth)
-        );
-      } catch (error) {
-        void error;
-      }
-    }
-
-    return layers;
+    return shared.formatResult(result, reasonMessage);
   }
 
   function getSelectedTransformLayers(composition) {
@@ -2744,17 +2663,6 @@
     );
 
     return presetFile.exists ? presetFile : null;
-  }
-
-  function applyPresetToOnlyLayer(layer, presetFile) {
-    var composition = layer.containingComp;
-
-    for (var index = 1; index <= composition.numLayers; index += 1) {
-      composition.layer(index).selected = false;
-    }
-
-    layer.selected = true;
-    layer.applyPreset(presetFile);
   }
 
   function isCompleteColorControlsEffect(effect, count) {

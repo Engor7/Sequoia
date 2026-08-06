@@ -1,6 +1,10 @@
 /* oxlint-disable no-unused-vars -- ExtendScript requires a catch binding. */
 (function (global) {
   var Sequoia = global.Sequoia || {};
+  var shared = global.SequoiaShared;
+  var getActiveComposition = shared.getActiveComposition;
+  var resultError = shared.resultError;
+  var resultSuccess = shared.resultSuccess;
   var TIME_EPSILON = 0.00001;
 
   function reasonMessage(reason) {
@@ -31,25 +35,8 @@
     return "After Effects could not complete the operation.";
   }
 
-  function resultError(reason) {
-    return { ok: false, reason: reason || "operationFailed" };
-  }
-
-  function resultSuccess(count) {
-    return { ok: true, count: count || 0 };
-  }
-
   function formatResult(result) {
-    if (result && result.ok) {
-      return result.count > 0 ? "ok|" + result.count : "noop|0";
-    }
-
-    return "error|" + reasonMessage(result ? result.reason : "operationFailed");
-  }
-
-  function getActiveComposition() {
-    var composition = app.project.activeItem;
-    return composition instanceof CompItem ? composition : null;
+    return shared.formatResult(result, reasonMessage);
   }
 
   function copyArrayValue(value) {

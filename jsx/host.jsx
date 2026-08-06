@@ -1,5 +1,17 @@
+(function () {
+  var hostFile = new File($.fileName);
+  var sharedFile = new File(hostFile.parent.fsName + "/shared.jsx");
+
+  if (sharedFile.exists) {
+    $.evalFile(sharedFile);
+  }
+})();
+
 (function (global) {
   var Sequoia = global.Sequoia || {};
+  var shared = global.SequoiaShared;
+  var applyPresetToOnlyLayer = shared.applyPresetToOnlyLayer;
+  var getSelectedLayerList = shared.getSelectedLayerList;
 
   function getLayerBounds(layer, time) {
     try {
@@ -883,28 +895,6 @@
     }
 
     return presetFile;
-  }
-
-  function applyPresetToOnlyLayer(layer, presetFile) {
-    var composition = layer.containingComp;
-    var selection = [];
-
-    for (var index = 1; index <= composition.numLayers; index += 1) {
-      selection.push(composition.layer(index).selected === true);
-    }
-
-    try {
-      for (var deselectIndex = 1; deselectIndex <= composition.numLayers; deselectIndex += 1) {
-        composition.layer(deselectIndex).selected = false;
-      }
-
-      layer.selected = true;
-      layer.applyPreset(presetFile);
-    } finally {
-      for (var restoreIndex = 1; restoreIndex <= composition.numLayers; restoreIndex += 1) {
-        composition.layer(restoreIndex).selected = selection[restoreIndex - 1];
-      }
-    }
   }
 
   function addBounceEffect(layer, effectName, values) {
@@ -2269,41 +2259,6 @@
         ? errors.join("\n")
         : config.effectName + " could not be applied."
     );
-  }
-
-  function getSelectedLayerList(composition) {
-    var layers = [];
-    var selectedLayers = composition.selectedLayers;
-    var selectedProperties = composition.selectedProperties;
-
-    function pushLayer(layer) {
-      for (var index = 0; index < layers.length; index += 1) {
-        if (layers[index] === layer) {
-          return;
-        }
-      }
-
-      layers.push(layer);
-    }
-
-    for (var layerIndex = 0; layerIndex < selectedLayers.length; layerIndex += 1) {
-      pushLayer(selectedLayers[layerIndex]);
-    }
-
-    for (
-      var propertyIndex = 0;
-      propertyIndex < selectedProperties.length;
-      propertyIndex += 1
-    ) {
-      try {
-        var property = selectedProperties[propertyIndex];
-        pushLayer(property.propertyGroup(property.propertyDepth));
-      } catch (error) {
-        void error;
-      }
-    }
-
-    return layers;
   }
 
   /**
