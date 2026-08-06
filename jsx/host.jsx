@@ -2438,7 +2438,7 @@
     var composition = app.project.activeItem;
 
     if (!(composition instanceof CompItem)) {
-      return "0";
+      return "error|Open a composition before converting keyframes.";
     }
 
     var interpolationType;
@@ -2451,14 +2451,14 @@
     } else if (useAutoBezier) {
       interpolationType = KeyframeInterpolationType.BEZIER;
     } else {
-      return "0";
+      return "error|Unknown keyframe interpolation mode.";
     }
 
     var properties = getSelectedKeyframeProperties(composition);
     var changedKeys = 0;
 
     if (properties.length === 0) {
-      return "0";
+      return "error|Select at least one keyframe.";
     }
 
     app.beginUndoGroup("Convert Selected Keyframes");
@@ -2502,7 +2502,7 @@
       app.endUndoGroup();
     }
 
-    return changedKeys.toString();
+    return changedKeys > 0 ? "ok|" + changedKeys : "noop|0";
   };
 
   Sequoia.applyEasing = function (x1, y1, x2, y2) {
@@ -2515,7 +2515,7 @@
       !isFiniteNumber(x2) ||
       !isFiniteNumber(y2)
     ) {
-      return "0";
+      return "error|Open a composition before applying easing.";
     }
 
     x1 = clamp(x1, 0, 1);
@@ -2539,7 +2539,7 @@
     var changedSegments = 0;
 
     if (properties.length === 0) {
-      return "0";
+      return "error|Select at least two keyframes.";
     }
 
     app.beginUndoGroup("Apply Easing");
@@ -2598,7 +2598,7 @@
       app.endUndoGroup();
     }
 
-    return changedSegments.toString();
+    return changedSegments > 0 ? "ok|" + changedSegments : "noop|0";
   };
 
   Sequoia.removeSelectedBounce = function () {
@@ -3176,7 +3176,7 @@
     }
 
     if (changedLayers > 0) {
-      return changedLayers.toString();
+      return "ok|" + changedLayers;
     }
 
     return "error|" + (

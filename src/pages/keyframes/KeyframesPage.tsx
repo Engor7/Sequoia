@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from 'react'
 import { evalHostScript } from '../../shared/cep/cs-interface'
+import { runHostCommand } from '../../shared/cep/host-command'
 import { addErrorLog } from '../../shared/logging/error-log'
 import { PageLayout } from '../../shared/ui/page/PageLayout'
 import { ToolDiagram } from './ToolDiagram'
@@ -34,7 +35,6 @@ const tooltipOpenDelay = 700
 const tooltipCloseDelay = 120
 /** Clear of the trigger. HeroUI's own no-arrow default of 3px sits too close. */
 const tooltipOffset = 10
-const repeatedActionDelay = 200
 const errorLogSource = 'Keyframes'
 
 type SegmentedOption<Value extends string> = {
@@ -424,7 +424,6 @@ function KeyframeToolButton({
 }
 
 export function KeyframesPage() {
-  const lastActionRef = useRef({ id: '', time: 0 })
   const [hasClipboard, setHasClipboard] = useState(false)
   const [pasteOrigin, setPasteOrigin] = useState<KeyframePasteOrigin>('inPoint')
   const [stepUnit, setStepUnit] = useState<KeyframeStepUnit>('seconds')
@@ -465,39 +464,16 @@ export function KeyframesPage() {
         return
       }
 
-      const actionId = `${tool.id}-${modifiers.altKey}-${modifiers.shiftKey}-${modifiers.ctrlOrMetaKey}`
-      const now = Date.now()
-      const lastAction = lastActionRef.current
-
-      if (lastAction.id === actionId && now - lastAction.time < repeatedActionDelay) {
-        return
-      }
-
-      lastActionRef.current = { id: actionId, time: now }
-      evalHostScript(buildKeyframeScript(command), (result) => {
-        const normalizedResult = result.trim()
-
-        if (/^ok\|[1-9]\d*$/.test(normalizedResult)) {
+      runHostCommand({
+        id: `${tool.id}-${modifiers.altKey}-${modifiers.shiftKey}-${modifiers.ctrlOrMetaKey}`,
+        label: tool.label,
+        onSuccess: () => {
           if (tool.action === 'copy') {
             setHasClipboard(true)
           }
-
-          return
-        }
-
-        if (/^noop\|\d+$/.test(normalizedResult)) {
-          return
-        }
-
-        addErrorLog({
-          message:
-            normalizedResult === 'EvalScript_ErrMessage'
-              ? 'The After Effects host script could not be evaluated.'
-              : normalizedResult.indexOf('error|') === 0
-                ? normalizedResult.slice(6)
-                : `${tool.label} could not be completed.`,
-          source: tool.label,
-        })
+        },
+        partialUnit: 'keyframes',
+        script: buildKeyframeScript(command),
       })
     },
     [pasteOrigin, stepUnit, stepValue, stretchUnit, stretchValue],

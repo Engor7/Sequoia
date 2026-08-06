@@ -36,13 +36,12 @@ import {
   VectorToShapeIcon,
   WigglePropertyIcon,
 } from '../../shared/ui/icon'
-import { evalHostScript } from '../../shared/cep/cs-interface'
+import { runHostCommand } from '../../shared/cep/host-command'
 import {
   refreshSelectedMotionEffects,
   useSelectedMotionEffects,
   type MotionEffectId,
 } from '../../shared/cep/motion-effects'
-import { addErrorLog } from '../../shared/logging/error-log'
 import { PageLayout } from '../../shared/ui/page/PageLayout'
 import {
   cloneCurveHandles,
@@ -54,6 +53,12 @@ import {
 
 type HandleName = keyof CurveHandles
 type KeyframeConversionMode = 'autoBezier' | 'hold' | 'linear'
+
+const keyframeConversionLabels: Record<KeyframeConversionMode, string> = {
+  autoBezier: 'Auto Bezier Keyframes',
+  hold: 'Hold Keyframes',
+  linear: 'Linear Keyframes',
+}
 
 type AnchorPointPosition = {
   horizontal: 0 | 0.5 | 1
@@ -799,36 +804,25 @@ function CurveEditor({
   handles,
   onHandlesChange,
 }: CurveEditorProps) {
-  const lastHostActionRef = useRef({ id: '', time: 0 })
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false)
   const startPreview = () => setIsPreviewPlaying(true)
   const stopPreview = () => setIsPreviewPlaying(false)
-  const runHostAction = useCallback((id: string, script: string) => {
-    const now = Date.now()
-    const lastAction = lastHostActionRef.current
-
-    if (lastAction.id === id && now - lastAction.time < 200) {
-      return
-    }
-
-    lastHostActionRef.current = { id, time: now }
-    evalHostScript(script)
+  const convertKeyframes = useCallback((mode: KeyframeConversionMode) => {
+    runHostCommand({
+      id: `convert-${mode}`,
+      label: keyframeConversionLabels[mode],
+      partialUnit: 'keyframes',
+      script: `Sequoia.convertSelectedKeyframes("${mode}")`,
+    })
   }, [])
-  const convertKeyframes = useCallback(
-    (mode: KeyframeConversionMode) => {
-      runHostAction(
-        `convert-${mode}`,
-        `Sequoia.convertSelectedKeyframes("${mode}")`,
-      )
-    },
-    [runHostAction],
-  )
   const applyEasing = useCallback(() => {
-    runHostAction(
-      'apply-easing',
-      `Sequoia.applyEasing(${handles.start.x}, ${handles.start.y}, ${handles.end.x}, ${handles.end.y})`,
-    )
-  }, [handles, runHostAction])
+    runHostCommand({
+      id: 'apply-easing',
+      label: 'Apply Easing',
+      partialUnit: 'keyframes',
+      script: `Sequoia.applyEasing(${handles.start.x}, ${handles.start.y}, ${handles.end.x}, ${handles.end.y})`,
+    })
+  }, [handles])
 
   return (
     <div className="easing-editor" ref={containerRef}>
@@ -945,10 +939,9 @@ type EasingToolModifiers = {
 
 type EasingHostToolActionProps = {
   description: string
-  icon?: ReactNode
+  icon: ReactNode
   label: string
   onAction: (modifiers: EasingToolModifiers) => void
-  temporaryLabel?: string
 }
 
 function EasingHostToolAction({
@@ -956,7 +949,6 @@ function EasingHostToolAction({
   icon,
   label,
   onAction,
-  temporaryLabel,
 }: EasingHostToolActionProps) {
   const runFromPress = useCallback(
     (event: PressEvent) => {
@@ -979,9 +971,7 @@ function EasingHostToolAction({
     <Tooltip closeDelay={120} delay={motionEffectTooltipOpenDelay}>
       <Button
         aria-label={`${label}. ${description}`}
-        className={`easing-tool-action${
-          icon ? '' : ' easing-tool-action--temporary-label'
-        }`}
+        className="easing-tool-action"
         isIconOnly
         onMouseUp={runFromMouse}
         onPress={runFromPress}
@@ -989,7 +979,7 @@ function EasingHostToolAction({
         type="button"
         variant="outline"
       >
-        {icon ?? <span aria-hidden="true">{temporaryLabel}</span>}
+        {icon}
       </Button>
       <Tooltip.Content
           className="easing-motion-tooltip"
@@ -1016,8 +1006,6 @@ function EasingMotionEffectAction({
   removeScript,
   tooltipTitle,
 }: EasingMotionEffectActionProps) {
-  const lastApplyActionRef = useRef(0)
-  const lastRemoveActionRef = useRef(0)
   const tooltipTimerRef = useRef<number | null>(null)
   const hasSelectedProperties = useSelectedMotionEffects().has(effectId)
   const [isTooltipOpen, setIsTooltipOpen] = useState(false)
@@ -1072,105 +1060,27 @@ function EasingMotionEffectAction({
   )
 
   const applyEffect = useCallback(() => {
-    const now = Date.now()
-
-    if (now - lastApplyActionRef.current < 200) {
-      return
-    }
-
-    lastApplyActionRef.current = now
-    evalHostScript(applyScript, (result) => {
-      const normalizedResult = result.trim()
-
-      refreshSelectedMotionEffects()
-
-      if (
-        normalizedResult === 'EvalScript_ErrMessage' ||
-        /^ok\|[1-9]\d*$/.test(normalizedResult) ||
-        /^noop\|[1-9]\d*$/.test(normalizedResult)
-      ) {
-        return
-      }
-
-      if (normalizedResult.indexOf('partial|') === 0) {
-        const countSeparator = normalizedResult.indexOf('|', 8)
-        const appliedCount =
-          countSeparator === -1
-            ? normalizedResult.slice(8)
-            : normalizedResult.slice(8, countSeparator)
-        const details =
-          countSeparator === -1
-            ? undefined
-            : normalizedResult.slice(countSeparator + 1)
-
-        addErrorLog({
-          details,
-          message: `${effectName} was applied to ${appliedCount || 'some'} properties, but other selected properties were skipped.`,
-          source: effectName,
-        })
-        return
-      }
-
-      addErrorLog({
-        message:
-          normalizedResult.indexOf('error|') === 0
-            ? normalizedResult.slice(6)
-            : `${effectName} could not be applied.`,
-        source: effectName,
-      })
+    runHostCommand({
+      id: `apply-${effectId}`,
+      label: effectName,
+      onSettled: refreshSelectedMotionEffects,
+      partialUnit: 'properties',
+      partialVerb: 'was applied to',
+      script: applyScript,
     })
-  }, [applyScript, effectName])
+  }, [applyScript, effectId, effectName])
 
   const removeEffect = useCallback(() => {
-    const now = Date.now()
-
-    if (now - lastRemoveActionRef.current < 200) {
-      return
-    }
-
-    lastRemoveActionRef.current = now
-    evalHostScript(removeScript, (result) => {
-      const normalizedResult = result.trim()
-
-      refreshSelectedMotionEffects()
-
-      if (normalizedResult === 'EvalScript_ErrMessage') {
-        return
-      }
-
-      if (/^ok\|[1-9]\d*$/.test(normalizedResult)) {
-        setIsTooltipOpen(false)
-        return
-      }
-
-      if (normalizedResult.indexOf('partial|') === 0) {
-        const countSeparator = normalizedResult.indexOf('|', 8)
-        const removedCount =
-          countSeparator === -1
-            ? normalizedResult.slice(8)
-            : normalizedResult.slice(8, countSeparator)
-        const details =
-          countSeparator === -1
-            ? undefined
-            : normalizedResult.slice(countSeparator + 1)
-
-        addErrorLog({
-          details,
-          message: `${effectName} was removed from ${removedCount || 'some'} properties, but other selected properties were skipped.`,
-          source: effectName,
-        })
-        return
-      }
-
-      addErrorLog({
-        message:
-          normalizedResult.indexOf('error|') === 0
-            ? normalizedResult.slice(6)
-            : `${effectName} could not be removed.`,
-        source: effectName,
-      })
+    runHostCommand({
+      id: `remove-${effectId}`,
+      label: effectName,
+      onSettled: refreshSelectedMotionEffects,
+      onSuccess: () => setIsTooltipOpen(false),
+      partialUnit: 'properties',
+      partialVerb: 'was removed from',
+      script: removeScript,
     })
-  }, [effectName, removeScript])
+  }, [effectId, effectName, removeScript])
 
   return (
     <div className="easing-motion-action">
@@ -1244,87 +1154,18 @@ function EasingMotionEffectAction({
 }
 
 function EasingTools() {
-  const lastAnchorActionRef = useRef({ id: '', time: 0 })
-  const lastToolActionRef = useRef({ id: '', time: 0 })
-
   const setAnchorPoint = useCallback((position: AnchorPointPosition) => {
-    const now = Date.now()
-    const lastAction = lastAnchorActionRef.current
-
-    if (lastAction.id === position.id && now - lastAction.time < 200) {
-      return
-    }
-
-    lastAnchorActionRef.current = { id: position.id, time: now }
-    evalHostScript(
-      `Sequoia.setAnchorPoint(${position.horizontal}, ${position.vertical})`,
-      (result) => {
-        const normalizedResult = result.trim()
-
-        if (/^[1-9]\d*$/.test(normalizedResult)) {
-          return
-        }
-
-        addErrorLog({
-          message:
-            normalizedResult.indexOf('error|') === 0
-              ? normalizedResult.slice(6)
-              : 'Anchor Point was not changed.',
-          source: 'Anchor Point',
-        })
-      },
-    )
+    runHostCommand({
+      id: `anchor-${position.id}`,
+      label: 'Anchor Point',
+      partialUnit: 'layers',
+      script: `Sequoia.setAnchorPoint(${position.horizontal}, ${position.vertical})`,
+    })
   }, [])
 
   const runToolAction = useCallback(
     (id: string, label: string, script: string) => {
-      const now = Date.now()
-      const lastAction = lastToolActionRef.current
-
-      if (lastAction.id === id && now - lastAction.time < 200) {
-        return
-      }
-
-      lastToolActionRef.current = { id, time: now }
-      evalHostScript(script, (result) => {
-        const normalizedResult = result.trim()
-
-        if (
-          /^ok\|[1-9]\d*$/.test(normalizedResult) ||
-          /^noop\|\d+$/.test(normalizedResult)
-        ) {
-          return
-        }
-
-        if (normalizedResult.indexOf('partial|') === 0) {
-          const countSeparator = normalizedResult.indexOf('|', 8)
-          const changedCount =
-            countSeparator === -1
-              ? normalizedResult.slice(8)
-              : normalizedResult.slice(8, countSeparator)
-          const details =
-            countSeparator === -1
-              ? undefined
-              : normalizedResult.slice(countSeparator + 1)
-
-          addErrorLog({
-            details,
-            message: `${label} changed ${changedCount || 'some'} items, but part of the selection was skipped.`,
-            source: label,
-          })
-          return
-        }
-
-        addErrorLog({
-          message:
-            normalizedResult === 'EvalScript_ErrMessage'
-              ? 'The After Effects host script could not be evaluated.'
-              : normalizedResult.indexOf('error|') === 0
-              ? normalizedResult.slice(6)
-              : `${label} could not be completed.`,
-          source: label,
-        })
-      })
+      runHostCommand({ id, label, script })
     },
     [],
   )
